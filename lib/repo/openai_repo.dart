@@ -1,10 +1,18 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'package:askaide/helper/ability.dart';
 import 'package:askaide/helper/constant.dart';
+import 'package:askaide/helper/env.dart';
+import 'package:askaide/helper/logger.dart';
 import 'package:askaide/helper/platform.dart';
+import 'package:askaide/helper/queue.dart';
+import 'package:askaide/repo/model/chat_message.dart';
 import 'package:askaide/repo/model/model.dart' as mm;
 import 'package:dart_openai/openai.dart';
 import 'package:askaide/repo/data/settings_data.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/status.dart' as status;
 
 class OpenAIRepository {
   final SettingDataProvider settings;
@@ -37,17 +45,17 @@ class OpenAIRepository {
     } else {
       // 使用公共服务器
       OpenAI.apiKey = settings.getDefault(settingAPIServerToken, '');
-      OpenAI.baseUrl = apiServerURL;
+      OpenAI.baseUrl = settings.getDefault(settingServerURL, apiServerURL);
       OpenAI.organization = "";
       OpenAI.externalHeaders = {
-        'X-CLIENT-VERSION': VERSION,
+        'X-CLIENT-VERSION': clientVersion,
         'X-PLATFORM': PlatformTool.operatingSystem(),
         'X-PLATFORM-VERSION': PlatformTool.operatingSystemVersion(),
         'X-LANGUAGE': language,
       };
     }
 
-    OpenAI.showLogs = false;
+    OpenAI.showLogs = true;
   }
 
   /// 基于 prompt 生成图片
@@ -79,36 +87,48 @@ class OpenAIRepository {
   static final supportForChat = <String, mm.Model>{
     'gpt-3.5-turbo': mm.Model(
       'gpt-3.5-turbo',
-      'gpt-3.5-turbo',
+      'GPT-3.5 Turbo',
       'openai',
       category: modelTypeOpenAI,
       isChatModel: true,
-      description: '能力最强的 GPT-3.5 模型，成本低',
+      description: '速度快，成本低',
+      shortName: 'GPT-3.5 Turbo',
+      tag: 'local',
+      avatarUrl: 'https://ssl.aicode.cc/ai-server/assets/avatar/gpt35.png',
     ),
     'gpt-3.5-turbo-16k': mm.Model(
       'gpt-3.5-turbo-16k',
-      'gpt-3.5-turbo-16k',
+      'GPT-3.5 Turbo 16k',
       'openai',
       category: modelTypeOpenAI,
       isChatModel: true,
-      description: '能力最强的 GPT-3.5 模型，成本为 gpt-3.5-turbo 的两倍，但是支持 4K 上下文',
+      description: '3.5 升级版，支持 16K 长文本',
+      shortName: 'GPT-3.5 Turbo 16K',
+      tag: 'local',
+      avatarUrl: 'https://ssl.aicode.cc/ai-server/assets/avatar/gpt35.png',
     ),
     'gpt-4': mm.Model(
       'gpt-4',
-      'gpt-4',
+      'GPT-4',
       'openai',
       category: modelTypeOpenAI,
       isChatModel: true,
-      description: '比GPT-3.5模型更强，能够执行复杂任务，并优化用于聊天',
+      description: '能力强，更精准',
+      shortName: 'GPT-4',
+      tag: 'local',
+      avatarUrl: 'https://ssl.aicode.cc/ai-server/assets/avatar/gpt4.png',
     ),
 
     'gpt-4-32k': mm.Model(
       'gpt-4-32k',
-      'gpt-4-32k',
+      'GPT-4 32k',
       'openai',
       category: modelTypeOpenAI,
       isChatModel: true,
       description: '基于 GPT-4，但是支持4倍的内容长度',
+      shortName: 'GPT-4 32K',
+      tag: 'local',
+      avatarUrl: 'https://ssl.aicode.cc/ai-server/assets/avatar/gpt4.png',
     ),
 
     // 'gpt-4-0314': Model(
@@ -228,43 +248,146 @@ class OpenAIRepository {
   }
 
   Future<void> chatStream(
-    List<OpenAIChatCompletionChoiceMessageModel> messages,
+    List<ChatMessage> messages,
     void Function(ChatStreamRespData data) onData, {
     double temperature = 1.0,
     user = 'user',
-    model = defaultChatModel,
+    String model = defaultChatModel,
     int? roomId,
     int? maxTokens,
+    String? tempModel,
   }) async {
     var completer = Completer<void>();
 
     try {
-      var chatStream = OpenAI.instance.chat.createStream(
-        model: model,
-        messages: messages,
-        temperature: temperature,
-        user: user,
-        maxTokens: maxTokens,
-        n: roomId, // n 参数暂时用不到，复用作为 roomId
-      );
+      bool canUseWebsocket = true;
+      if (Ability().enableLocalOpenAI) {
+        if (supportForChat.containsKey(model) || model.startsWith('openai:')) {
+          canUseWebsocket = false;
+        }
+      }
 
-      chatStream.listen(
-        (event) {
-          for (var element in event.choices) {
-            if (element.delta.content != null) {
+      if (!Ability().isUserLogon()) {
+        canUseWebsocket = false;
+      }
+
+      if (Ability().supportWebSocket && canUseWebsocket) {
+        var serverURL = settings.getDefault(settingServerURL, apiServerURL);
+        if (PlatformTool.isWeb() && (serverURL == '' || serverURL == '/')) {
+          serverURL =
+              '${Uri.base.scheme}://${Uri.base.host}${Uri.base.hasPort ? ':${Uri.base.port}' : ''}';
+        }
+
+        final wsURL = serverURL.startsWith('https://')
+            ? serverURL.replaceFirst('https://', 'wss://')
+            : serverURL.replaceFirst('http://', 'ws://');
+        final wsUri = Uri.parse('$wsURL/v1/chat/completions');
+
+        final apiToken = settings.getDefault(settingAPIServerToken, '');
+
+        var channel = WebSocketChannel.connect(Uri(
+          scheme: wsUri.scheme,
+          host: wsUri.host,
+          port: wsUri.port,
+          path: wsUri.path,
+          queryParameters: {
+            'ws': 'true',
+            'authorization': apiToken,
+            'client-version': clientVersion,
+            'platform-version': PlatformTool.operatingSystemVersion(),
+            'platform': PlatformTool.operatingSystem(),
+            'language': language,
+          },
+        ));
+
+        await channel.ready;
+
+        channel.stream.listen(
+          (event) {
+            final evt = jsonDecode(event);
+            if (evt['code'] != null && evt['code'] > 0) {
               onData(ChatStreamRespData(
-                content: element.delta.content!,
-                role: element.delta.role,
+                content: evt['error'],
+                code: evt['code'],
+                error: evt['error'],
               ));
+
+              return;
             }
-          }
-        },
-        onDone: () => completer.complete(),
-        onError: (e) => completer.completeError(e),
-        cancelOnError: true,
-      ).onError((e) {
-        completer.completeError(e);
-      });
+
+            final res = OpenAIStreamChatCompletionModel.fromMap(evt);
+            for (var element in res.choices) {
+              if (element.delta.content != null) {
+                try {
+                  onData(ChatStreamRespData(
+                    content: element.delta.content!,
+                    role: element.delta.role,
+                  ));
+                } on QueueFinishedException {
+                  channel.sink.close(status.goingAway);
+                }
+              }
+            }
+          },
+          onDone: () {
+            channel.sink.close();
+            completer.complete();
+          },
+          onError: (e) {
+            channel.sink.close();
+            completer.completeError(e);
+          },
+          cancelOnError: true,
+        ).onError((e) {
+          completer.completeError(e);
+        });
+
+        final data = jsonEncode({
+          'model': model,
+          'temp_model': tempModel,
+          'messages': messages.map((e) => e.toMap()).toList(),
+          'temperature': temperature,
+          'user': user,
+          'max_tokens': maxTokens,
+          'n': Ability().enableLocalOpenAI &&
+                  (model.startsWith('openai:') || model.startsWith('gpt-'))
+              ? null
+              : roomId, // n 参数暂时用不到，复用作为 roomId
+        });
+
+        Logger.instance.d('send chat request: $data');
+
+        channel.sink.add(data);
+      } else {
+        var chatStream = OpenAI.instance.chat.createStream(
+          model: model,
+          messages: messages,
+          temperature: temperature,
+          user: user,
+          maxTokens: maxTokens,
+          n: Ability().enableLocalOpenAI
+              ? null
+              : roomId, // n 参数暂时用不到，复用作为 roomId
+        );
+
+        chatStream.listen(
+          (event) {
+            for (var element in event.choices) {
+              if (element.delta.content != null) {
+                onData(ChatStreamRespData(
+                  content: element.delta.content!,
+                  role: element.delta.role,
+                ));
+              }
+            }
+          },
+          onDone: () => completer.complete(),
+          onError: (e) => completer.completeError(e),
+          cancelOnError: true,
+        ).onError((e) {
+          completer.completeError(e);
+        });
+      }
     } catch (e) {
       completer.completeError(e);
     }
@@ -302,9 +425,13 @@ class ChatReplyMessage {
 class ChatStreamRespData {
   final String? role;
   final String content;
+  final int? code;
+  final String? error;
 
   ChatStreamRespData({
     this.role,
     required this.content,
+    this.code,
+    this.error,
   });
 }

@@ -13,29 +13,41 @@ class ModelAggregate {
   }
 
   /// 支持的模型列表
-  static Future<List<mm.Model>> models() async {
+  static Future<List<mm.Model>> models({bool cache = true, bool withCustom = false}) async {
     final List<mm.Model> models = [];
-    final isAPIServerSet =
-        settings.stringDefault(settingAPIServerToken, '') != '';
+    final isAPIServerSet = settings.stringDefault(settingAPIServerToken, '') != '';
     final selfHostOpenAI = settings.boolDefault(settingOpenAISelfHosted, false);
 
-    if (isAPIServerSet && !selfHostOpenAI) {
-      models.addAll((await APIServer().models())
+    if (isAPIServerSet) {
+      models.addAll((await APIServer().models(cache: cache, withCustom: withCustom))
           .map(
             (e) => mm.Model(
               e.id.split(':').last,
               e.name,
               e.category,
+              shortName: e.shortName,
               description: e.description,
+              priceInfo: e.priceInfo,
               isChatModel: e.isChat,
               disabled: e.disabled,
               category: e.category,
               tag: e.tag,
+              avatarUrl: e.avatarUrl,
+              supportVision: e.supportVision,
+              tagTextColor: e.tagTextColor,
+              tagBgColor: e.tagBgColor,
+              isNew: e.isNew,
+              isDefault: e.isDefault,
             ),
           )
           .toList());
-    } else {
-      models.addAll(OpenAIRepository.supportModels());
+    }
+
+    if (selfHostOpenAI) {
+      return <mm.Model>[
+        ...OpenAIRepository.supportModels(),
+        ...models.where((element) => element.category != modelTypeOpenAI).toList()
+      ];
     }
 
     // if (isAPIServerSet ||
@@ -54,27 +66,12 @@ class ModelAggregate {
 
   /// 根据模型唯一id查找模型
   static Future<mm.Model> model(String uid) async {
-    if (uid.split(':').length == 1) {
-      uid = '$modelTypeOpenAI:$uid';
-    }
+    uid = uid.split(':').last;
 
     final supportModels = await models();
-    // if (uid.startsWith('$modelTypeOpenAI:')) {
-    //   models.addAll(OpenAIRepository.supportModels());
-    // }
-
-    // if (uid.startsWith('$modelTypeDeepAI:')) {
-    //   models.addAll(DeepAIRepository.supportModels());
-    // }
-
-    // if (uid.startsWith('$modelTypeStabilityAI:')) {
-    //   models.addAll(StabilityAIRepository.supportModels());
-    // }
-
     return supportModels.firstWhere(
-      (element) => element.uid() == uid,
-      orElse: () => mm.Model(defaultChatModel, defaultChatModel, 'openai',
-          category: modelTypeOpenAI),
+      (element) => element.uid() == uid || element.id == uid,
+      orElse: () => mm.Model(defaultChatModel, defaultChatModel, 'openai', category: modelTypeOpenAI),
     );
   }
 }

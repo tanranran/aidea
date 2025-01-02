@@ -1,8 +1,10 @@
 import 'dart:io';
 
 import 'package:askaide/helper/platform.dart';
-import 'package:askaide/page/dialog.dart';
+import 'package:askaide/lang/lang.dart';
+import 'package:askaide/page/component/dialog.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:fluwx/fluwx.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -13,11 +15,18 @@ Future<void> shareTo(
   String? title,
   List<String>? images,
 }) async {
-  final box = context.findRenderObject() as RenderBox?;
-  if ((PlatformTool.isIOS() || PlatformTool.isAndroid()) &&
-      await isWeChatInstalled) {
-    // ignore: use_build_context_synchronously
+  Rect? sharePositionOrigin;
+
+  try {
+    final box = context.findRenderObject() as RenderBox?;
+    Rect? pos = box!.localToGlobal(Offset.zero) & box.size;
+    sharePositionOrigin = pos;
+    // ignore: empty_catches
+  } catch (ignored) {}
+
+  if ((PlatformTool.isIOS() || PlatformTool.isAndroid()) && await isWeChatInstalled) {
     openModalBottomSheet(
+      // ignore: use_build_context_synchronously
       context,
       (context) => Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -51,9 +60,9 @@ Future<void> shareTo(
                   children: [
                     Image.asset('assets/friendroom.png', width: 40),
                     const SizedBox(height: 10),
-                    const Text(
-                      '分享到朋友圈',
-                      style: TextStyle(fontSize: 12),
+                    Text(
+                      AppLocale.shareToWechatQ.getString(context),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
@@ -80,9 +89,9 @@ Future<void> shareTo(
                   children: [
                     Image.asset('assets/wechat.png', width: 40),
                     const SizedBox(height: 10),
-                    const Text(
-                      '分享到微信',
-                      style: TextStyle(fontSize: 12),
+                    Text(
+                      AppLocale.shareToWechat.getString(context),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
@@ -93,15 +102,13 @@ Future<void> shareTo(
                     Share.shareXFiles(
                       [XFile(images.first)],
                       subject: title,
-                      sharePositionOrigin:
-                          box!.localToGlobal(Offset.zero) & box.size,
+                      sharePositionOrigin: sharePositionOrigin,
                     ).whenComplete(() => context.pop());
                   } else {
                     Share.share(
                       content,
                       subject: title,
-                      sharePositionOrigin:
-                          box!.localToGlobal(Offset.zero) & box.size,
+                      sharePositionOrigin: sharePositionOrigin,
                     ).whenComplete(() => context.pop());
                   }
                 },
@@ -110,9 +117,9 @@ Future<void> shareTo(
                   children: [
                     Image.asset('assets/share.png', width: 40),
                     const SizedBox(height: 10),
-                    const Text(
-                      '分享到其它应用',
-                      style: TextStyle(fontSize: 12),
+                    Text(
+                      AppLocale.shareToOtherApps.getString(context),
+                      style: const TextStyle(fontSize: 12),
                     ),
                   ],
                 ),
@@ -128,13 +135,13 @@ Future<void> shareTo(
       Share.shareXFiles(
         [XFile(images.first)],
         subject: title,
-        sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
+        sharePositionOrigin: sharePositionOrigin,
       );
     } else {
       Share.share(
         content,
         subject: title,
-        sharePositionOrigin: box!.localToGlobal(Offset.zero) & box.size,
+        sharePositionOrigin: sharePositionOrigin,
       );
     }
   }

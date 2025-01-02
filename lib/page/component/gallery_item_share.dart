@@ -1,6 +1,9 @@
+import 'dart:io';
+
 import 'package:askaide/helper/constant.dart';
 import 'package:askaide/helper/helper.dart';
 import 'package:askaide/helper/image.dart';
+import 'package:askaide/helper/logger.dart';
 import 'package:askaide/helper/platform.dart';
 import 'package:askaide/lang/lang.dart';
 import 'package:askaide/page/component/column_block.dart';
@@ -9,10 +12,10 @@ import 'package:askaide/page/component/image.dart';
 import 'package:askaide/page/component/image_preview.dart';
 import 'package:askaide/page/component/loading.dart';
 import 'package:askaide/page/component/share.dart';
-import 'package:askaide/page/dialog.dart';
-import 'package:askaide/page/gallery/gallery_item.dart';
-import 'package:askaide/page/theme/custom_size.dart';
-import 'package:askaide/page/theme/custom_theme.dart';
+import 'package:askaide/page/component/dialog.dart';
+import 'package:askaide/page/creative_island/gallery/gallery_item.dart';
+import 'package:askaide/page/component/theme/custom_size.dart';
+import 'package:askaide/page/component/theme/custom_theme.dart';
 import 'package:askaide/repo/api_server.dart';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:file_saver/file_saver.dart';
@@ -49,52 +52,52 @@ class _GalleryItemShareScreenState extends State<GalleryItemShareScreen> {
       appBar: AppBar(
         toolbarHeight: CustomSize.toolbarHeight,
         actions: [
-          TextButton(
-            onPressed: () async {
-              final cancel = BotToast.showCustomLoading(
-                toastBuilder: (cancel) {
-                  return LoadingIndicator(
-                    message: AppLocale.processingWait.getString(context),
-                  );
-                },
-                allowClick: false,
-                duration: const Duration(seconds: 15),
-              );
+          if (!PlatformTool.isWeb())
+            TextButton(
+              onPressed: () async {
+                final cancel = BotToast.showCustomLoading(
+                  toastBuilder: (cancel) {
+                    return LoadingIndicator(
+                      message: AppLocale.processingWait.getString(context),
+                    );
+                  },
+                  allowClick: false,
+                  duration: const Duration(seconds: 15),
+                );
 
-              try {
-                final data = await controller.capture();
-                if (data != null) {
-                  final file = await writeTempFile('share-image.png', data);
+                try {
+                  final data = await controller.capture();
+                  if (data != null) {
+                    final file = await writeTempFile('share-image.png', data);
+                    cancel();
+                    await shareTo(
+                      // ignore: use_build_context_synchronously
+                      context,
+                      content: 'images',
+                      images: [
+                        file.path,
+                      ],
+                    );
+                  }
+                } finally {
                   cancel();
-                  // ignore: use_build_context_synchronously
-                  await shareTo(
-                    context,
-                    content: 'images',
-                    images: [
-                      file.path,
-                    ],
-                  );
                 }
-              } finally {
-                cancel();
-              }
-            },
-            child: Row(
-              children: [
-                Icon(Icons.share, size: 14, color: customColors.weakLinkColor),
-                const SizedBox(width: 5),
-                Text(
-                  '分享',
-                  style: TextStyle(
-                      color: customColors.weakLinkColor, fontSize: 14),
-                ),
-              ],
+              },
+              child: Row(
+                children: [
+                  Icon(Icons.share, size: 14, color: customColors.weakLinkColor),
+                  const SizedBox(width: 5),
+                  Text(
+                    AppLocale.share.getString(context),
+                    style: TextStyle(color: customColors.weakLinkColor, fontSize: 14),
+                  ),
+                ],
+              ),
             ),
-          ),
           EnhancedPopupMenu(
             items: [
               EnhancedPopupMenuItem(
-                title: '保存到本地',
+                title: AppLocale.saveToLocal.getString(context),
                 icon: Icons.save,
                 onTap: (ctx) async {
                   final cancel = BotToast.showCustomLoading(
@@ -116,18 +119,39 @@ class _GalleryItemShareScreenState extends State<GalleryItemShareScreen> {
                       if (PlatformTool.isIOS() || PlatformTool.isAndroid()) {
                         await ImageGallerySaver.saveImage(data, quality: 100);
 
-                        showSuccessMessage('图片保存成功');
+                        showSuccessMessage(AppLocale.operateSuccess.getString(context));
                       } else {
-                        FileSaver.instance
-                            .saveFile(
-                          name: randomId(),
-                          bytes: data,
-                          ext: 'png',
-                          mimeType: MimeType.png,
-                        )
-                            .then((value) {
-                          showSuccessMessage('文件保存成功');
-                        });
+                        if (PlatformTool.isWindows()) {
+                          FileSaver.instance
+                              .saveAs(
+                            name: randomId(),
+                            bytes: data,
+                            ext: '.png',
+                            mimeType: MimeType.png,
+                          )
+                              .then((value) async {
+                            if (value == null) {
+                              return;
+                            }
+
+                            await File(value).writeAsBytes(data);
+
+                            Logger.instance.d('File saved successfully: $value');
+                            showSuccessMessage(AppLocale.operateSuccess.getString(context));
+                          });
+                        } else {
+                          FileSaver.instance
+                              .saveFile(
+                            name: randomId(),
+                            bytes: data,
+                            ext: 'png',
+                            mimeType: MimeType.png,
+                          )
+                              .then((value) {
+                            Logger.instance.d('File saved successfully: $value');
+                            showSuccessMessage(AppLocale.operateSuccess.getString(context));
+                          });
+                        }
                       }
                     }
                   } finally {
@@ -136,7 +160,9 @@ class _GalleryItemShareScreenState extends State<GalleryItemShareScreen> {
                 },
               ),
               EnhancedPopupMenuItem(
-                title: showQRCode ? '不显示邀请信息' : '显示邀请信息',
+                title: showQRCode
+                    ? AppLocale.dontShowInviteCode.getString(context)
+                    : AppLocale.showInviteCode.getString(context),
                 icon: showQRCode ? Icons.visibility_off : Icons.visibility,
                 onTap: (ctx) {
                   setState(() {
@@ -148,7 +174,7 @@ class _GalleryItemShareScreenState extends State<GalleryItemShareScreen> {
           )
         ],
       ),
-      backgroundColor: customColors.backgroundContainerColor,
+      backgroundColor: customColors.backgroundColor,
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
@@ -179,33 +205,28 @@ class _GalleryItemShareScreenState extends State<GalleryItemShareScreen> {
                                 children: [
                                   for (var img in widget.images)
                                     Container(
-                                      decoration: BoxDecoration(
-                                        color: customColors.backgroundColor,
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
+                                      decoration: BoxDecoration(color: customColors.backgroundColor),
                                       child: NetworkImagePreviewer(
                                         url: img,
-                                        preview:
-                                            imageURL(img, qiniuImageTypeThumb),
+                                        preview: imageURL(img, qiniuImageTypeThumb),
                                         hidePreviewButton: true,
                                         notClickable: true,
-                                        borderRadius: BorderRadius.circular(0),
+                                        borderRadius: BorderRadius.zero,
                                       ),
                                     ),
                                   ColumnBlock(
+                                    backgroundColor: customColors.backgroundContainerColor,
                                     innerPanding: 10,
                                     padding: const EdgeInsets.all(15),
                                     margin: const EdgeInsets.all(0),
                                     borderRadius: 0,
                                     children: [
-                                      if (widget.prompt != null &&
-                                          widget.prompt!.isNotEmpty)
+                                      if (widget.prompt != null && widget.prompt!.isNotEmpty)
                                         TextItem(
                                           title: 'Prompt',
                                           value: widget.prompt!,
                                         ),
-                                      if (widget.negativePrompt != null &&
-                                          widget.negativePrompt!.isNotEmpty)
+                                      if (widget.negativePrompt != null && widget.negativePrompt!.isNotEmpty)
                                         TextItem(
                                           title: 'Negative Prompt',
                                           value: widget.negativePrompt!,
@@ -214,7 +235,7 @@ class _GalleryItemShareScreenState extends State<GalleryItemShareScreen> {
                                   ),
                                   if (showQRCode)
                                     Container(
-                                      color: customColors.backgroundColor,
+                                      color: customColors.backgroundContainerColor,
                                       child: Padding(
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 15,
@@ -223,8 +244,7 @@ class _GalleryItemShareScreenState extends State<GalleryItemShareScreen> {
                                         child: Row(
                                           children: [
                                             ClipRRect(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
+                                              borderRadius: CustomSize.borderRadius,
                                               child: CachedNetworkImageEnhanced(
                                                 imageUrl: snapshot.data!.qrCode,
                                                 width: 100,

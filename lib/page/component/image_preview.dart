@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:askaide/helper/constant.dart';
 import 'package:askaide/helper/helper.dart';
 import 'package:askaide/helper/image.dart';
@@ -6,10 +8,11 @@ import 'package:askaide/helper/platform.dart';
 import 'package:askaide/lang/lang.dart';
 import 'package:askaide/page/component/gallery_item_share.dart';
 import 'package:askaide/page/component/image.dart';
+import 'package:askaide/page/component/image_action.dart';
 import 'package:askaide/page/component/loading.dart';
-import 'package:askaide/page/dialog.dart';
-import 'package:askaide/page/theme/custom_size.dart';
-import 'package:askaide/page/theme/custom_theme.dart';
+import 'package:askaide/page/component/dialog.dart';
+import 'package:askaide/page/component/theme/custom_size.dart';
+import 'package:askaide/page/component/theme/custom_theme.dart';
 import 'package:before_after/before_after.dart';
 import 'package:bot_toast/bot_toast.dart';
 import 'package:file_saver/file_saver.dart';
@@ -50,48 +53,36 @@ class _NetworkImagePreviewerState extends State<NetworkImagePreviewer> {
 
     if (widget.hidePreviewButton) {
       return ClipRRect(
-        borderRadius: widget.borderRadius ?? BorderRadius.circular(8),
+        borderRadius: widget.borderRadius ?? CustomSize.borderRadius,
         child: widget.original == null
             ? _buildImage(widget.borderRadius)
             : BeforeAfter(
-                beforeImage: Image(
-                    image: CachedNetworkImageProviderEnhanced(
-                        imageURL(widget.original!, qiniuImageTypeThumb))),
+                beforeImage:
+                    Image(image: CachedNetworkImageProviderEnhanced(imageURL(widget.original!, qiniuImageTypeThumb))),
                 afterImage: Image(
-                    image: CachedNetworkImageProviderEnhanced(imageURL(
-                        widget.preview ?? widget.url, qiniuImageTypeThumb))),
+                    image: CachedNetworkImageProviderEnhanced(
+                        imageURL(widget.preview ?? widget.url, qiniuImageTypeThumb))),
                 thumbWidth: 1.0,
               ),
       );
     }
 
     return Container(
-      decoration: BoxDecoration(
-        color: customColors.columnBlockBackgroundColor,
-        borderRadius: BorderRadius.circular(8),
-      ),
+      decoration: BoxDecoration(color: customColors.columnBlockBackgroundColor, borderRadius: CustomSize.borderRadius),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           widget.original == null
-              ? _buildImage(const BorderRadius.only(
-                  topLeft: Radius.circular(8),
-                  topRight: Radius.circular(8),
-                ))
+              ? _buildImage(const BorderRadius.only(topLeft: CustomSize.radius, topRight: CustomSize.radius))
               : ClipRRect(
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(8),
-                    topRight: Radius.circular(8),
-                  ),
+                  borderRadius: const BorderRadius.only(topLeft: CustomSize.radius, topRight: CustomSize.radius),
                   child: BeforeAfter(
                     imageCornerRadius: 0,
                     beforeImage: Image(
-                        image: CachedNetworkImageProviderEnhanced(
-                            imageURL(widget.original!, qiniuImageTypeThumb))),
+                        image: CachedNetworkImageProviderEnhanced(imageURL(widget.original!, qiniuImageTypeThumb))),
                     afterImage: Image(
-                        image: CachedNetworkImageProviderEnhanced(imageURL(
-                            widget.preview ?? widget.url,
-                            qiniuImageTypeThumb))),
+                        image: CachedNetworkImageProviderEnhanced(
+                            imageURL(widget.preview ?? widget.url, qiniuImageTypeThumb))),
                     thumbWidth: 0.5,
                     thumbRadius: 3,
                   ),
@@ -115,7 +106,7 @@ class _NetworkImagePreviewerState extends State<NetworkImagePreviewer> {
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        '分享',
+                        AppLocale.share.getString(context),
                         style: TextStyle(
                           fontSize: 12,
                           color: customColors.weakLinkColor,
@@ -143,13 +134,43 @@ class _NetworkImagePreviewerState extends State<NetworkImagePreviewer> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
+                        Icons.webhook,
+                        size: 14,
+                        color: customColors.weakLinkColor,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        AppLocale.shortcut.getString(context),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: customColors.weakLinkColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  onPressed: () {
+                    openImageWorkflowActionDialog(
+                      context,
+                      customColors,
+                      widget.url,
+                    );
+                  },
+                ),
+                IconButton(
+                  splashColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                  hoverColor: Colors.transparent,
+                  icon: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
                         Icons.open_in_new,
                         size: 14,
                         color: customColors.weakLinkColor,
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        '预览',
+                        AppLocale.preview.getString(context),
                         style: TextStyle(
                           fontSize: 12,
                           color: customColors.weakLinkColor,
@@ -162,12 +183,11 @@ class _NetworkImagePreviewerState extends State<NetworkImagePreviewer> {
                       openImagePreviewDialog(
                         context,
                         customColors,
-                        imageProvider:
-                            CachedNetworkImageProviderEnhanced(widget.url),
+                        imageProvider: CachedNetworkImageProviderEnhanced(widget.url),
                         imageUrl: widget.url,
                       );
                     } catch (e) {
-                      showErrorMessageEnhanced(context, '图片加载失败，请稍后再试');
+                      showErrorMessageEnhanced(context, 'Image loading failed, please try again later');
                     }
                   },
                 ),
@@ -245,9 +265,9 @@ class ImageFilePreviewer extends StatelessWidget {
   Widget build(BuildContext context) {
     final customColors = Theme.of(context).extension<CustomColors>()!;
     return ClipRRect(
-      borderRadius: borderRadius ?? BorderRadius.circular(8),
+      borderRadius: borderRadius ?? CustomSize.borderRadius,
       child: InkWell(
-        borderRadius: borderRadius ?? BorderRadius.circular(8),
+        borderRadius: borderRadius ?? CustomSize.borderRadiusAll,
         child: Image(image: imageProvider, fit: BoxFit.cover),
         onTap: () {
           openImagePreviewDialog(
@@ -268,10 +288,12 @@ void openImagePreviewDialog(
   BuildContext context,
   CustomColors customColors, {
   required ImageProvider imageProvider,
-  required String imageUrl,
+  String? imageUrl,
   String? originalURL,
   String? description,
 }) {
+  final downloadUrl = originalURL ?? imageUrl;
+
   Navigator.of(context).push(
     MaterialPageRoute(
       fullscreenDialog: true,
@@ -285,89 +307,146 @@ void openImagePreviewDialog(
             },
           ),
           actions: [
-            IconButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    fullscreenDialog: true,
-                    builder: (context) => GalleryItemShareScreen(
-                      images: [imageUrl],
+            if (imageUrl != null)
+              IconButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      fullscreenDialog: true,
+                      builder: (context) => GalleryItemShareScreen(
+                        images: [imageUrl],
+                      ),
                     ),
-                  ),
-                );
-              },
-              icon: Icon(
-                Icons.share,
-                size: 16,
-                color: customColors.weakLinkColor,
+                  );
+                },
+                icon: Icon(
+                  Icons.share,
+                  size: 16,
+                  color: customColors.weakLinkColor,
+                ),
               ),
-            ),
-            IconButton(
-              onPressed: () async {
-                final cancel = BotToast.showCustomLoading(
-                  toastBuilder: (cancel) {
-                    return const LoadingIndicator(
-                      message: '下载中，请稍候...',
-                    );
-                  },
-                  allowClick: false,
-                  duration: const Duration(seconds: 120),
-                );
+            if (downloadUrl != null)
+              IconButton(
+                onPressed: () async {
+                  final cancel = BotToast.showCustomLoading(
+                    toastBuilder: (cancel) {
+                      return const LoadingIndicator(
+                        message: 'Downloading, please wait...',
+                      );
+                    },
+                    allowClick: false,
+                    duration: const Duration(seconds: 120),
+                  );
 
-                try {
-                  final saveFile = await DefaultCacheManager()
-                      .getSingleFile(originalURL ?? imageUrl);
+                  try {
+                    final saveFile = await DefaultCacheManager().getSingleFile(downloadUrl);
 
-                  if (PlatformTool.isIOS() || PlatformTool.isAndroid()) {
+                    if (PlatformTool.isIOS() || PlatformTool.isAndroid()) {
+                      await ImageGallerySaver.saveImage(
+                        saveFile.readAsBytesSync(),
+                        quality: 100,
+                      );
+
+                      showSuccessMessage(AppLocale.operateSuccess.getString(context));
+                    } else {
+                      var ext = saveFile.path.toLowerCase().split('.').last;
+                      MimeType mimeType;
+                      switch (ext) {
+                        case 'jpg':
+                        case 'jpeg':
+                          mimeType = MimeType.jpeg;
+                          break;
+                        case 'png':
+                          mimeType = MimeType.png;
+                          break;
+                        case 'gif':
+                          mimeType = MimeType.gif;
+                          break;
+                        default:
+                          mimeType = MimeType.other;
+                      }
+
+                      if (PlatformTool.isWindows()) {
+                        FileSaver.instance
+                            .saveAs(
+                          name: filenameWithoutExt(saveFile.path.split('/').last),
+                          filePath: saveFile.path,
+                          ext: '.$ext',
+                          mimeType: mimeType,
+                        )
+                            .then((value) async {
+                          if (value == null) {
+                            return;
+                          }
+
+                          await File(value).writeAsBytes(await saveFile.readAsBytes());
+
+                          Logger.instance.d('File saved successfully: $value');
+                          showSuccessMessage(AppLocale.operateSuccess.getString(context));
+                        });
+                      } else {
+                        FileSaver.instance
+                            .saveFile(
+                          name: filenameWithoutExt(saveFile.path.split('/').last),
+                          filePath: saveFile.path,
+                          ext: ext,
+                          mimeType: mimeType,
+                        )
+                            .then((value) {
+                          Logger.instance.d('File saved successfully: $value');
+                          showSuccessMessage(AppLocale.operateSuccess.getString(context));
+                        });
+                      }
+                    }
+                  } catch (e) {
+                    // ignore: use_build_context_synchronously
+                    showErrorMessageEnhanced(context, 'Image save failed, please try again later');
+                    Logger.instance.e('Failed to download the original image', error: e);
+                  } finally {
+                    cancel();
+                  }
+                },
+                icon: Icon(
+                  Icons.download_sharp,
+                  size: 16,
+                  color: customColors.weakLinkColor,
+                ),
+              ),
+            if (downloadUrl == null && (PlatformTool.isIOS() || PlatformTool.isAndroid()))
+              IconButton(
+                onPressed: () async {
+                  final cancel = BotToast.showCustomLoading(
+                    toastBuilder: (cancel) {
+                      return const LoadingIndicator(
+                        message: 'Downloading, please wait...',
+                      );
+                    },
+                    allowClick: false,
+                    duration: const Duration(seconds: 120),
+                  );
+
+                  try {
                     await ImageGallerySaver.saveImage(
-                      saveFile.readAsBytesSync(),
+                      (imageProvider as MemoryImage).bytes,
                       quality: 100,
                     );
 
-                    showSuccessMessage('图片保存成功');
-                  } else {
-                    var ext = saveFile.path.toLowerCase().split('.').last;
-                    MimeType mimeType;
-                    switch (ext) {
-                      case 'jpg':
-                      case 'jpeg':
-                        mimeType = MimeType.jpeg;
-                        break;
-                      case 'png':
-                        mimeType = MimeType.png;
-                        break;
-                      case 'gif':
-                        mimeType = MimeType.gif;
-                        break;
-                      default:
-                        mimeType = MimeType.other;
-                    }
-
-                    FileSaver.instance
-                        .saveFile(
-                      name: filenameWithoutExt(saveFile.path.split('/').last),
-                      filePath: saveFile.path,
-                      ext: ext,
-                      mimeType: mimeType,
-                    )
-                        .then((value) {
-                      showSuccessMessage('文件保存成功');
-                    });
+                    showSuccessMessage(AppLocale.operateSuccess.getString(context));
+                  } catch (e) {
+                    // ignore: use_build_context_synchronously
+                    showErrorMessageEnhanced(context, 'Image save failed, please try again later.');
+                    Logger.instance.e('Failed to download the original image', error: e);
+                  } finally {
+                    cancel();
                   }
-                } catch (e) {
-                  showErrorMessageEnhanced(context, '图片保存失败，请稍后再试');
-                  Logger.instance.e('下载图片原图失败', e);
-                } finally {
-                  cancel();
-                }
-              },
-              icon: Icon(
-                Icons.download_sharp,
-                size: 16,
-                color: customColors.weakLinkColor,
-              ),
-            ),
+                },
+                icon: Icon(
+                  Icons.download_sharp,
+                  size: 16,
+                  color: customColors.weakLinkColor,
+                ),
+              )
           ],
         ),
         backgroundColor: customColors.backgroundContainerColor,
@@ -381,4 +460,33 @@ void openImagePreviewDialog(
       ),
     ),
   );
+}
+
+class ImageProviderPreviewer extends StatelessWidget {
+  final ImageProvider imageProvider;
+  final BorderRadius? borderRadius;
+  const ImageProviderPreviewer({
+    super.key,
+    required this.imageProvider,
+    this.borderRadius,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final customColors = Theme.of(context).extension<CustomColors>()!;
+    return ClipRRect(
+      borderRadius: borderRadius ?? CustomSize.borderRadius,
+      child: InkWell(
+        borderRadius: borderRadius ?? CustomSize.borderRadiusAll,
+        child: Image(image: imageProvider, fit: BoxFit.cover),
+        onTap: () {
+          openImagePreviewDialog(
+            context,
+            customColors,
+            imageProvider: imageProvider,
+          );
+        },
+      ),
+    );
+  }
 }

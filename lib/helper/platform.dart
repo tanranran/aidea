@@ -3,6 +3,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 class PlatformTool {
+  static bool isDesktop() {
+    return isWindows() || isLinux() || isMacOS();
+  }
+
   static bool isIOS() {
     try {
       return Platform.isIOS;
@@ -34,6 +38,14 @@ class PlatformTool {
   static bool isWindows() {
     try {
       return Platform.isWindows;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  static bool isLinux() {
+    try {
+      return Platform.isLinux;
     } catch (e) {
       return false;
     }

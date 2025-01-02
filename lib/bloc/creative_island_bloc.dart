@@ -24,9 +24,10 @@ class CreativeIslandBloc
     // });
 
     on<CreativeIslandItemsV2LoadEvent>((event, emit) async {
+      final items =
+          await APIServer().creativeIslandItemsV2(cache: !event.forceRefresh);
       emit(CreativeIslandItemsV2Loaded(
-        items:
-            await APIServer().creativeIslandItemsV2(cache: !event.forceRefresh),
+        items: items,
       ));
     });
 
@@ -103,6 +104,7 @@ class CreativeIslandBloc
     });
 
     on<CreativeIslandHistoryItemLoadEvent>((event, emit) async {
+      emit(CreativeIslandHistoryItemLoading());
       emit(CreativeIslandHistoryItemLoaded(
         item: await APIServer().creativeHistoryItem(
           hisId: event.itemId,

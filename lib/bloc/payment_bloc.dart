@@ -11,8 +11,8 @@ part 'payment_state.dart';
 class PaymentBloc extends Bloc<PaymentEvent, PaymentState> {
   PaymentBloc() : super(PaymentInitial()) {
     on<PaymentLoadAppleProducts>((event, emit) async {
-      if (PlatformTool.isIOS() || PlatformTool.isMacOS()) {
-        final products = await APIServer().applePayProducts();
+      if (PlatformTool.isIOS()) {
+        final products = await APIServer().paymentProducts();
         if (products.consume.isEmpty) {
           emit(PaymentAppleProductsLoaded(
             const <ProductDetails>[],
@@ -69,7 +69,7 @@ class PaymentBloc extends Bloc<PaymentEvent, PaymentState> {
           loading: false,
         ));
       } else {
-        final products = await APIServer().alipayProducts();
+        final products = await APIServer().paymentProducts();
         if (products.consume.isEmpty) {
           emit(PaymentAppleProductsLoaded(
             const <ProductDetails>[],
@@ -89,7 +89,9 @@ class PaymentBloc extends Bloc<PaymentEvent, PaymentState> {
                     id: e.id,
                     title: e.name,
                     description: '',
-                    price: e.retailPriceText,
+                    price: products.preferUSD
+                        ? e.retailPriceUSDText
+                        : e.retailPriceText,
                     rawPrice: e.retailPrice.toDouble(),
                     currencyCode: '',
                   ),
@@ -98,6 +100,7 @@ class PaymentBloc extends Bloc<PaymentEvent, PaymentState> {
             note: products.note,
             localProducts: products.consume,
             loading: false,
+            preferUSD: products.preferUSD,
           ),
         );
       }

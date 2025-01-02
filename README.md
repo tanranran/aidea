@@ -1,80 +1,64 @@
 # AIdea - AI 聊天、协作、图像生成
 
 [![FOSSA Status](https://app.fossa.com/api/projects/custom%2B39727%2Fgithub.com%2Fmylxsw%2Faidea.svg?type=shield&issueType=license)](https://app.fossa.com/projects/custom%2B39727%2Fgithub.com%2Fmylxsw%2Faidea?ref=badge_shield)
-![GitHub release (by tag)](https://img.shields.io/github/downloads/mylxsw/aidea/1.0.3/total)
+![GitHub release (by tag)](https://img.shields.io/github/downloads/mylxsw/aidea/1.0.4/total)
 ![GitHub](https://img.shields.io/github/license/mylxsw/aidea)
 
+<a href="https://trendshift.io/repositories/1013" target="_blank"><img src="https://trendshift.io/api/badge/repositories/1013" alt="mylxsw%2Faidea | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
-一款集成了主流大语言模型以及绘图模型的 APP， 采用 Flutter 开发，代码完全开源，支持以下功能：
+一款集成了主流大语言模型以及绘图模型的 APP， 采用 Flutter 开发，代码完全开源。
 
-- 支持 GPT-3.5/4 问答聊天
-- 支持国产模型：通义千问，文心一言
-- 支持文生图、图生图、超分辨率、黑白图片上色等功能，集成 Stable Diffusion 模型，支持 SDXL 1.0
+下载体验地址：
+
+https://aidea.aicode.cc
 
 开源代码：
 
 - 客户端：https://github.com/mylxsw/aidea
-- 服务端：https://github.com/mylxsw/aidea-server （即将开放）
+- 服务端：https://github.com/mylxsw/aidea-server
+- Docker 部署：https://github.com/mylxsw/aidea-docker
 
-微信技术交流群：
+## 开发、编译运行环境
 
-<img src="https://github.com/mylxsw/aidea/assets/2330911/36087479-36bb-4871-9e34-3bdf752a1188" width="400" />
+默认分支 `main` 是 v2 版本，当前正在开发中，如需自己部署，请切换到 [v1.x](https://github.com/mylxsw/aidea/tree/v1.x) 分支。
 
-> 微信群满了加不进去的话，可以添加微信号 `x-prometheus` 为好友，拉你进群。
-> 
-> <img src="https://github.com/mylxsw/aidea/assets/2330911/655601c1-9371-4460-9657-c58521260336" width="400"/>
+```bash
+git checkout v1.x
+```
 
-电报群：[点此加入](https://t.me/aideachat)
+搭建开发环境，用来编译和打包 APP，可以参考下面的文章，更多文章后面有时间了会持续更新。
 
-## 下载安装地址
+- [AIdea 项目开发环境部署教程（一）前端 Flutter 环境搭建](https://mp.weixin.qq.com/s/bgAIH6s7t5IREusK_WtpRg)
 
-Android/IOS APP：https://aidea.aicode.cc/
+## 私有化部署
 
-> IOS 国区目前不可用，除此之外所有区域都可以下载。
->
-> 2023 年 9 月 4 日发现国区被下架后，非国区 IOS 版本可能无法完成应用内购（提示“你的购买无法完成”，但是也有人能够成功支付），暂时无法充值，最新进展在这里 [issue#16](https://github.com/mylxsw/aidea/issues/16)。
+如果你不想使用托管的云服务，可以自己部署服务端，[部署请看这里](https://github.com/mylxsw/aidea-server/blob/main/docs/deploy.md)。
 
-Mac 桌面端：https://github.com/mylxsw/aidea/releases
+不想自己折腾，可以找我来帮你部署，详情参考 [服务器代部署说明](https://github.com/mylxsw/aidea-server/blob/main/docs/deploy-vip.md)。
 
-Web 端：https://web.aicode.cc/
+## 技术交流
+
+- 微信技术交流群：
+
+    <img src="https://github.com/user-attachments/assets/379d0b66-b806-4ed4-ae2e-30fccd9de50e" width="400"/>
+
+    如果无法加入，请添加微信号 `x-prometheus` 为好友，拉你进群。
+
+- 微信公众号
+
+    <img src="https://github.com/mylxsw/aidea-server/assets/2330911/376a3b9f-eacd-45c6-9630-39eb720ba097" width="500" />
+
 
 ## APP 截图
 
-![images](resources/Xnip2023-08-30_11-32-34.png)  | ![images](resources/Xnip2023-08-30_11-32-42.png)
-:-------------------------:|:-------------------------:
-![images](resources/Xnip2023-08-30_11-32-53.png)  | ![images](resources/Xnip2023-08-30_11-33-44.png) 
-![images](resources/Xnip2023-08-30_11-34-14.png)  | ![images](resources/Xnip2023-08-30_11-34-28.png) 
-![images](resources/Xnip2023-08-30_11-34-42.png)  | ![images](resources/Xnip2023-08-30_11-35-01.png) 
-![images](resources/Xnip2023-08-30_11-35-33.png)  | ![images](resources/Xnip2023-08-30_11-35-52.png)
+亮色系
 
-## 如果对你有帮助，请我喝杯酒吧
+![image](https://github.com/mylxsw/aidea/assets/2330911/89fc3f6f-b110-45f4-9e9a-b43a7a2c011a)
 
-微信  | 支付宝
-:-------------------------:|:-------------------------:
-![image](https://github.com/mylxsw/aidea/assets/2330911/46e2242b-17bc-41ff-bebe-b5cc466b7f17) | ![image](https://github.com/mylxsw/aidea/assets/2330911/f3c85d4a-bea8-4a76-b582-c673613f76cb)
+暗色系
 
+![image](https://github.com/mylxsw/aidea/assets/2330911/7c0167eb-4bd3-4dcb-8b7b-a6d22cebe3ae)
 
-## 常见问题
-
-### 1. Mac 桌面端应用无法打开，报错如下
-
-<img width="300" src="https://user-images.githubusercontent.com/15153075/264509300-426d70bd-fd1b-4078-9eb9-5588a917b023.png">
-
-临时解决方案，命令行执行
-
-```bash
-sudo codesign -f -s - /Applications/AIdea.app
-```
-
-<img width="1125" alt="image" src="https://github.com/mylxsw/aidea/assets/2330911/5ef3fbe1-6cb3-4a64-9c17-82dd8c864ac7">
-
-### 2. Web 端使用 Nginx 部署后，`canvaskit.wasm` 文件响应的 `Content-Type`  是 `application/octet-stream`，而不是 `application/wasm` 
-
-在 Nginx 配置文件 `/etc/nginx/mime.types` 中，增加 wasm 支持
-
-```nginx
-application/wasm wasm;
-```
 
 ## Star History
 
@@ -91,5 +75,3 @@ application/wasm wasm;
 MIT
 
 Copyright (c) 2023, mylxsw
-
-[![FOSSA Status](https://app.fossa.com/api/projects/custom%2B39727%2Fgithub.com%2Fmylxsw%2Faidea.svg?type=large)](https://app.fossa.com/projects/custom%2B39727%2Fgithub.com%2Fmylxsw%2Faidea?ref=badge_large)

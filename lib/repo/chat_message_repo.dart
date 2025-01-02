@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:askaide/helper/constant.dart';
-import 'package:askaide/lang/lang.dart';
 import 'package:askaide/repo/data/chat_history.dart';
 import 'package:askaide/repo/data/room_data.dart';
 import 'package:askaide/repo/model/chat_history.dart';
@@ -53,10 +52,13 @@ class ChatMessageRepository {
     await _chatMsgDataProvider.clearMessages(roomId);
   }
 
-  /// 返回 room 中最后 30 条消息，如果不足则全部返回
-  Future<List<Message>> getRecentMessages(int roomId, int lastAliveTime,
-      {int? userId, int? chatHistoryId}) async {
-    final recentMessages = (await _chatMsgDataProvider.getRecentMessages(
+  /// 返回 room 中最近的消息
+  Future<List<Message>> getRecentMessages(
+    int roomId, {
+    int? userId,
+    int? chatHistoryId,
+  }) async {
+    return (await _chatMsgDataProvider.getRecentMessages(
       roomId,
       chatMessagePerPage,
       userId: userId,
@@ -64,30 +66,6 @@ class ChatMessageRepository {
     ))
         .reversed
         .toList();
-    if (recentMessages.isEmpty) {
-      return recentMessages;
-    }
-
-    var lastAliveIndex = recentMessages.lastIndexWhere((element) {
-      return !element.isSystem() &&
-          (element.ts == null ||
-              element.ts!.millisecondsSinceEpoch < lastAliveTime);
-    });
-    if (lastAliveIndex > -1 && !recentMessages[lastAliveIndex].isSystem()) {
-      recentMessages.insert(
-        lastAliveIndex + 1,
-        Message(
-          Role.receiver,
-          AppLocale.contextBreakMessage,
-          ts: DateTime.now(),
-          type: MessageType.system,
-          roomId: roomId,
-          userId: userId,
-          id: -1,
-        ),
-      );
-    }
-    return recentMessages;
   }
 
   /// 发送消息到 room
@@ -95,9 +73,23 @@ class ChatMessageRepository {
     return await _chatMsgDataProvider.sendMessage(roomId, message);
   }
 
+  /// 修复所有消息的状态（pending -> failed）
+  Future<void> fixMessageStatus(int roomId) async {
+    return await _chatMsgDataProvider.fixMessageStatus(roomId);
+  }
+
   /// 更新消息
   Future<void> updateMessage(int roomId, int id, Message message) async {
     return await _chatMsgDataProvider.updateMessage(roomId, id, message);
+  }
+
+  /// 部分更新消息
+  Future<void> updateMessagePart(
+    int roomId,
+    int id,
+    List<MessagePart> parts,
+  ) async {
+    return await _chatMsgDataProvider.updateMessagePart(roomId, id, parts);
   }
 
   /// 删除消息
@@ -111,10 +103,8 @@ class ChatMessageRepository {
   }
 
   /// 获取 room 中最后一条消息
-  Future<Message?> getLastMessage(int roomId,
-      {int? userId, int? chatHistoryId}) async {
-    return await _chatMsgDataProvider.getLastMessage(roomId,
-        userId: userId, chatHistoryId: chatHistoryId);
+  Future<Message?> getLastMessage(int roomId, {int? userId, int? chatHistoryId}) async {
+    return await _chatMsgDataProvider.getLastMessage(roomId, userId: userId, chatHistoryId: chatHistoryId);
   }
 
   /// 获取 room
@@ -156,12 +146,16 @@ class ChatMessageRepository {
   Future<List<ChatHistory>> recentChatHistories(
     int roomId,
     int count, {
+    String? keyword,
     int? userId,
+    int? offset,
   }) async {
     return await _chatHistoryProvider.getChatHistories(
       roomId,
       count,
+      keyword: keyword,
       userId: userId,
+      offset: offset,
     );
   }
 

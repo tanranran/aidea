@@ -1,12 +1,27 @@
-import 'package:askaide/page/theme/custom_theme.dart';
+import 'package:askaide/page/component/theme/custom_theme.dart';
+import 'package:askaide/repo/api/model.dart';
 import 'package:flutter/material.dart';
 
-class ModelIndicatorInfo {
+class IconAndColor {
   final IconData icon;
-  final Color activeColor;
-  final String modelId;
-  final String modelName;
-  final String description;
+  final Color color;
+
+  IconAndColor(this.icon, this.color);
+}
+
+final iconAndColors = [
+  IconAndColor(Icons.bolt, Colors.green),
+  IconAndColor(Icons.auto_awesome, const Color.fromARGB(255, 120, 73, 223)),
+  IconAndColor(Icons.extension, const Color.fromARGB(255, 255, 122, 13)),
+];
+
+class ModelIndicatorInfo {
+  IconData icon;
+  Color activeColor;
+  String modelId;
+  String modelName;
+  String description;
+  bool supportVision;
 
   ModelIndicatorInfo({
     required this.modelName,
@@ -14,57 +29,66 @@ class ModelIndicatorInfo {
     required this.description,
     required this.icon,
     required this.activeColor,
+    this.supportVision = false,
   });
 }
 
 class ModelIndicator extends StatelessWidget {
-  final ModelIndicatorInfo model;
+  final HomeModelV2 model;
+  final IconAndColor iconAndColor;
   final bool selected;
+  final int itemCount;
 
   const ModelIndicator({
     super.key,
     required this.model,
+    required this.iconAndColor,
     this.selected = false,
+    this.itemCount = 2,
   });
 
   @override
   Widget build(BuildContext context) {
     var customColors = Theme.of(context).extension<CustomColors>()!;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: EdgeInsets.only(top: 5),
-          child: Icon(
-            model.icon,
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: itemCount > 2 ? 10 : 15),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            iconAndColor.icon,
             color: selected ? Colors.white : customColors.weakLinkColor,
-            size: 20,
+            size: itemCount > 2 ? 16 : 20,
           ),
-        ),
-        const SizedBox(width: 6),
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              model.modelName,
-              style: TextStyle(
-                fontSize: 16,
-                color: selected ? Colors.white : customColors.weakLinkColor,
-                fontWeight: FontWeight.w600,
+          SizedBox(width: itemCount > 2 ? 5 : 10),
+          Expanded(
+            child: Center(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        model.name,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: itemCount > 2 ? 14 : 15,
+                          color: selected
+                              ? Colors.white
+                              : customColors.weakLinkColor,
+                          fontWeight: FontWeight.w600,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ),
+                  SizedBox(width: itemCount > 2 ? 16 : 20),
+                ],
               ),
             ),
-            Text(
-              model.description,
-              style: TextStyle(
-                fontSize: 10,
-                color: selected ? Colors.white : customColors.weakTextColor,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(width: 15),
-      ],
+          ),
+        ],
+      ),
     );
   }
 }

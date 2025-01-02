@@ -40,6 +40,12 @@ class Message {
   /// 关联消息ID（问题 ID）
   int? refId;
 
+  /// 服务端 ID
+  int? serverId;
+
+  /// 消息状态: 1-成功 0-等待应答 2-失败
+  int status;
+
   /// 消息消耗的配额
   int? quotaConsumed;
 
@@ -48,6 +54,17 @@ class Message {
 
   /// 是否当前消息已就绪，不需要持久化
   bool isReady = true;
+
+  /// 消息发送者的头像，不需要持久化
+  String? avatarUrl;
+
+  /// 消息发送者的名称，不需要持久化
+  String? senderName;
+
+  /// 消息图片列表
+  List<String>? images;
+  // Uploaded file by user (json(name, url))
+  String? file;
 
   Message(
     this.role,
@@ -62,8 +79,14 @@ class Message {
     this.roomId,
     this.extra,
     this.refId,
+    this.serverId,
+    this.status = 1,
     this.quotaConsumed,
     this.tokenConsumed,
+    this.avatarUrl,
+    this.senderName,
+    this.images,
+    this.file,
   });
 
   /// 获取消息附加信息
@@ -102,6 +125,30 @@ class Message {
     return humanTime(ts);
   }
 
+  /// 是否已失败
+  bool statusIsFailed() {
+    return status == 2;
+  }
+
+  /// 是否已成功
+  bool statusIsSucceed() {
+    return status == 1;
+  }
+
+  /// 是否等待应答
+  bool statusPending() {
+    return status == 0;
+  }
+
+  String get markdownWithImages {
+    var t = text;
+    if (images != null && images!.isNotEmpty) {
+      t = images!.map((e) => '![img]($e)\n\n').join('') + t;
+    }
+
+    return t;
+  }
+
   Map<String, Object?> toMap() {
     return {
       'id': id,
@@ -116,8 +163,12 @@ class Message {
       'ts': ts?.millisecondsSinceEpoch,
       'room_id': roomId,
       'ref_id': refId,
+      'server_id': serverId,
+      'status': status,
       'token_consumed': tokenConsumed,
       'quota_consumed': quotaConsumed,
+      'images': images != null ? jsonEncode(images) : null,
+      'file': file,
     };
   }
 
@@ -132,12 +183,19 @@ class Message {
         type = MessageType.getTypeFromText(map['type'] as String),
         user = map['user'] as String?,
         refId = map['ref_id'] as int?,
+        serverId = map['server_id'] as int?,
+        status = (map['status'] ?? 1) as int,
         tokenConsumed = map['token_consumed'] as int?,
         quotaConsumed = map['quota_consumed'] as int?,
         ts = map['ts'] == null
             ? null
             : DateTime.fromMillisecondsSinceEpoch(map['ts'] as int),
-        roomId = map['room_id'] as int?;
+        roomId = map['room_id'] as int?,
+        images = map['images'] == null
+            ? null
+            : (jsonDecode(map['images'] as String) as List<dynamic>)
+                .cast<String>(),
+        file = map['file'] as String?;
 }
 
 enum Role {
@@ -148,7 +206,11 @@ enum Role {
     switch (value) {
       case 'receiver':
         return Role.receiver;
+      case 'assistant':
+        return Role.receiver;
       case 'sender':
+        return Role.sender;
+      case 'user':
         return Role.sender;
       default:
         return Role.receiver;

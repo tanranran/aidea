@@ -1,27 +1,36 @@
-import 'package:askaide/page/theme/custom_theme.dart';
-import 'package:askaide/repo/api_server.dart';
+import 'package:askaide/lang/lang.dart';
+import 'package:askaide/page/component/theme/custom_size.dart';
+import 'package:askaide/page/component/theme/custom_theme.dart';
+import 'package:askaide/repo/model/misc.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+import 'package:lottie/lottie.dart';
 
 class EmptyPreview extends StatefulWidget {
   final List<ChatExample> examples;
   final Function(String message) onSubmit;
+  final bool cardMode;
 
-  EmptyPreview({
+  const EmptyPreview({
     super.key,
     required this.examples,
     required this.onSubmit,
-  }) {
-    // 示例问题随机排序
-    if (examples.isNotEmpty) {
-      examples.shuffle();
-    }
-  }
+    this.cardMode = false,
+  });
 
   @override
   State<EmptyPreview> createState() => _EmptyPreviewState();
 }
 
 class _EmptyPreviewState extends State<EmptyPreview> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.examples.isEmpty) {
@@ -29,6 +38,96 @@ class _EmptyPreviewState extends State<EmptyPreview> {
     }
 
     final customColors = Theme.of(context).extension<CustomColors>()!;
+
+    if (widget.cardMode) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Expanded(
+            child: Container(
+              alignment: Alignment.center,
+              child: Opacity(
+                opacity: 0.2,
+                child: Lottie.asset('assets/lottie/empty_status.json', width: 200, height: 200),
+              ),
+            ),
+          ),
+          Container(
+            height: 60,
+            alignment: Alignment.center,
+            child: ListView.separated(
+              controller: _scrollController,
+              itemCount: (widget.examples.length > 4 ? 4 : widget.examples.length) + 1,
+              scrollDirection: Axis.horizontal,
+              itemBuilder: (context, index) {
+                if (index == (widget.examples.length > 4 ? 4 : widget.examples.length)) {
+                  return Container(
+                    width: 60,
+                    padding: const EdgeInsets.all(10),
+                    margin: const EdgeInsets.only(left: 10, right: 15),
+                    alignment: Alignment.center,
+                    child: InkWell(
+                      borderRadius: CustomSize.borderRadiusAll,
+                      onTap: () {
+                        setState(() {
+                          widget.examples.shuffle();
+                        });
+                        _scrollController.animateTo(
+                          0.0,
+                          duration: const Duration(milliseconds: 300),
+                          curve: Curves.easeOut,
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(5),
+                        alignment: Alignment.center,
+                        child: Icon(Icons.refresh, color: customColors.weakTextColor),
+                      ),
+                    ),
+                  );
+                }
+                return Container(
+                  margin: const EdgeInsets.only(left: 10, right: 5),
+                  child: InkWell(
+                    borderRadius: CustomSize.borderRadiusAll,
+                    onTap: () {
+                      widget.onSubmit(widget.examples[index].text);
+                    },
+                    child: Container(
+                      width: 200,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: customColors.chatInputAreaBackground,
+                        borderRadius: CustomSize.borderRadius,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        widget.examples[index].title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: customColors.weakTextColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+              separatorBuilder: (BuildContext context, int index) {
+                return Divider(
+                  color: customColors.chatExampleItemText?.withAlpha(20),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+      );
+    }
+
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
@@ -37,11 +136,10 @@ class _EmptyPreviewState extends State<EmptyPreview> {
           // 示例内容区域
           Container(
             decoration: BoxDecoration(
-              color: customColors.backgroundColor?.withAlpha(200),
-              borderRadius: BorderRadius.circular(10),
+              // color: customColors.backgroundColor?.withAlpha(200),
+              borderRadius: CustomSize.borderRadius,
             ),
-            padding:
-                const EdgeInsets.only(top: 20, left: 15, right: 10, bottom: 3),
+            padding: const EdgeInsets.only(top: 20, left: 15, right: 10, bottom: 3),
             height: _resolveTipHeight(context),
             width: _resolveTipWidth(context),
             child: Column(
@@ -50,12 +148,11 @@ class _EmptyPreviewState extends State<EmptyPreview> {
               children: [
                 Row(
                   children: [
-                    Image.asset('assets/app-256-transparent.png',
-                        width: 20, height: 20),
+                    Image.asset('assets/app-256-transparent.png', width: 20, height: 20),
                     const SizedBox(width: 5),
-                    const Text(
-                      '可以这样问我：',
-                      style: TextStyle(
+                    Text(
+                      AppLocale.askMeLikeThis.getString(context),
+                      style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -65,8 +162,7 @@ class _EmptyPreviewState extends State<EmptyPreview> {
                 const SizedBox(height: 20),
                 Expanded(
                   child: ListView.separated(
-                    itemCount:
-                        widget.examples.length > 4 ? 4 : widget.examples.length,
+                    itemCount: widget.examples.length > 4 ? 4 : widget.examples.length,
                     physics: const NeverScrollableScrollPhysics(),
                     itemBuilder: (context, index) {
                       return ListTextItem(
@@ -88,8 +184,7 @@ class _EmptyPreviewState extends State<EmptyPreview> {
                   alignment: Alignment.centerRight,
                   child: TextButton(
                     style: ButtonStyle(
-                      overlayColor:
-                          MaterialStateProperty.all(Colors.transparent),
+                      overlayColor: WidgetStateProperty.all(Colors.transparent),
                     ),
                     onPressed: () {
                       setState(() {
@@ -106,11 +201,11 @@ class _EmptyPreviewState extends State<EmptyPreview> {
                         ),
                         const SizedBox(width: 3),
                         Text(
-                          '换一换',
+                          AppLocale.refresh.getString(context),
                           style: TextStyle(
                             color: customColors.chatExampleItemText,
                           ),
-                          textScaleFactor: 0.9,
+                          textScaler: const TextScaler.linear(0.9),
                         ),
                       ],
                     ),
@@ -130,7 +225,7 @@ class _EmptyPreviewState extends State<EmptyPreview> {
       return screenWidth / 1.15;
     }
 
-    return 400;
+    return 348;
   }
 
   double _resolveTipHeight(BuildContext context) {

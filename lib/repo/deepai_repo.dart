@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:askaide/helper/constant.dart';
+import 'package:askaide/helper/env.dart';
 import 'package:askaide/helper/platform.dart';
 import 'package:askaide/repo/data/settings_data.dart';
 import 'package:http/http.dart' as http;
@@ -39,7 +40,7 @@ class DeepAIRepository {
       serverURL = apiServerURL;
 
       _headers = {
-        'X-CLIENT-VERSION': VERSION,
+        'X-CLIENT-VERSION': clientVersion,
         'X-PLATFORM': PlatformTool.operatingSystem(),
         'X-PLATFORM-VERSION': PlatformTool.operatingSystemVersion(),
         'X-LANGUAGE': language,

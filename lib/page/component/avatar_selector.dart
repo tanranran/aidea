@@ -1,11 +1,14 @@
 import 'dart:io';
 
 import 'package:askaide/helper/haptic_feedback.dart';
+import 'package:askaide/lang/lang.dart';
 import 'package:askaide/page/component/image.dart';
 import 'package:askaide/page/component/random_avatar.dart';
-import 'package:askaide/page/theme/custom_theme.dart';
+import 'package:askaide/page/component/theme/custom_size.dart';
+import 'package:askaide/page/component/theme/custom_theme.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 
 enum AvatarType {
   localFile,
@@ -27,7 +30,6 @@ class Avatar {
 
 class AvatarSelector extends StatefulWidget {
   final Function(Avatar selected) onSelected;
-  final int randomSeed;
 
   final int? defaultAvatarId;
   final String? defaultAvatarUrl;
@@ -40,7 +42,6 @@ class AvatarSelector extends StatefulWidget {
   const AvatarSelector({
     super.key,
     required this.onSelected,
-    required this.randomSeed,
     this.defaultAvatarId,
     this.defaultAvatarUrl,
     required this.usage,
@@ -73,28 +74,58 @@ class _AvatarSelectorState extends State<AvatarSelector> {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             if (_avatarUrl != null)
-              SizedBox(
-                width: 100,
-                height: 100,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: _avatarUrl!.startsWith('http')
-                      ? CachedNetworkImageEnhanced(
-                          imageUrl: _avatarUrl!,
-                        )
-                      : Image.file(File(_avatarUrl!)),
-                ),
+              Stack(
+                children: [
+                  SizedBox(
+                    width: 100,
+                    height: 100,
+                    child: ClipRRect(
+                      borderRadius: CustomSize.borderRadius,
+                      child: _avatarUrl!.startsWith('http')
+                          ? CachedNetworkImageEnhanced(
+                              imageUrl: _avatarUrl!,
+                            )
+                          : Image.file(File(_avatarUrl!)),
+                    ),
+                  ),
+                  Positioned(
+                    right: 5,
+                    top: 5,
+                    child: InkWell(
+                      onTap: () {
+                        setState(() {
+                          _avatarUrl = null;
+                          _avatarId = null;
+                        });
+                        widget.onSelected(Avatar(
+                          type: AvatarType.network,
+                          url: _avatarUrl,
+                        ));
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          borderRadius: CustomSize.borderRadius,
+                          color: customColors.chatRoomBackground,
+                        ),
+                        child: Icon(
+                          Icons.close,
+                          size: 10,
+                          color: customColors.weakTextColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            if (_avatarId != null)
-              RandomAvatar(id: _avatarId ?? 0, size: 80, usage: widget.usage),
+            if (_avatarId != null) RandomAvatar(id: _avatarId ?? 0, size: 80, usage: widget.usage),
             Material(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: CustomSize.borderRadius,
               child: InkWell(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: CustomSize.borderRadiusAll,
                 onTap: () async {
                   HapticFeedbackHelper.mediumImpact();
-                  FilePickerResult? result =
-                      await FilePicker.platform.pickFiles(type: FileType.image);
+                  FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.image);
                   if (result != null && result.files.isNotEmpty) {
                     setState(() {
                       _avatarUrl = result.files.first.path;
@@ -102,19 +133,17 @@ class _AvatarSelectorState extends State<AvatarSelector> {
                     });
 
                     widget.onSelected(Avatar(
-                      type: _avatarUrl!.startsWith('http')
-                          ? AvatarType.network
-                          : AvatarType.localFile,
+                      type: _avatarUrl!.startsWith('http') ? AvatarType.network : AvatarType.localFile,
                       url: _avatarUrl,
                     ));
                   }
                 },
                 child: Container(
                     decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: CustomSize.borderRadius,
                     ),
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: CustomSize.borderRadius,
                       child: SizedBox(
                         height: 100,
                         width: 160,
@@ -128,12 +157,11 @@ class _AvatarSelectorState extends State<AvatarSelector> {
                             ),
                             const SizedBox(width: 10),
                             Text(
-                              '自定义',
+                              AppLocale.custom.getString(context),
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
-                                color: customColors.chatInputPanelText
-                                    ?.withOpacity(0.8),
+                                color: customColors.chatInputPanelText?.withOpacity(0.8),
                               ),
                             ),
                           ],
@@ -193,10 +221,9 @@ class _AvatarSelectorState extends State<AvatarSelector> {
   Widget _buildAvatarButton(CustomColors customColors, Avatar avatar) {
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(11),
+        borderRadius: CustomSize.borderRadius,
         border: Border.all(
-          color: (_avatarUrl != null && _avatarUrl == avatar.url) ||
-                  (_avatarId != null && _avatarId == avatar.id)
+          color: (_avatarUrl != null && _avatarUrl == avatar.url) || (_avatarId != null && _avatarId == avatar.id)
               ? customColors.linkColor ?? Colors.green
               : Colors.transparent,
           width: 4,
@@ -214,7 +241,7 @@ class _AvatarSelectorState extends State<AvatarSelector> {
         child: avatar.type == AvatarType.random
             ? RandomAvatar(id: avatar.id ?? 0, size: 80, usage: widget.usage)
             : ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: CustomSize.borderRadius,
                 child: CachedNetworkImageEnhanced(
                   imageUrl: avatar.url!,
                   fit: BoxFit.fill,

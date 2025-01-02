@@ -104,6 +104,24 @@ Future<void> migrate(db, oldVersion, newVersion) async {
   if (oldVersion < 23) {
     await db.execute('ALTER TABLE chat_history ADD COLUMN model TEXT;');
   }
+
+  if (oldVersion < 24) {
+    await db
+        .execute('ALTER TABLE chat_message ADD COLUMN server_id INTEGER NULL;');
+  }
+
+  if (oldVersion < 25) {
+    await db.execute(
+        'ALTER TABLE chat_message ADD COLUMN status INTEGER DEFAULT 1;');
+  }
+
+  if (oldVersion < 26) {
+    await db.execute('ALTER TABLE chat_message ADD COLUMN images TEXT NULL;');
+  }
+
+  if (oldVersion < 27) {
+    await db.execute('ALTER TABLE chat_message ADD COLUMN file TEXT NULL;');
+  }
 }
 
 /// 数据库初始化
@@ -144,9 +162,13 @@ void initDatabase(db, version) async {
           text TEXT,
           extra TEXT,
           ref_id INTEGER NULL,
+          server_id INTEGER NULL,
+          status INTEGER DEFAULT 1,
           token_consumed INTEGER NULL,
           quota_consumed INTEGER NULL,
           model TEXT,
+          images TEXT NULL,
+          file TEXT NULL,
           ts INTEGER NOT NULL
         )
       ''');

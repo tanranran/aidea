@@ -1,3 +1,4 @@
+import 'package:askaide/page/component/theme/custom_size.dart';
 import 'package:flutter/material.dart';
 
 class MessageBox extends StatelessWidget {
@@ -10,12 +11,13 @@ class MessageBox extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: type.backgroundColor,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: CustomSize.borderRadius,
         border: Border.all(
           color: type.borderColor,
           width: 1,
         ),
       ),
+      margin: const EdgeInsets.symmetric(horizontal: 5),
       padding: const EdgeInsets.symmetric(
         vertical: 8,
         horizontal: 16,
@@ -38,12 +40,13 @@ class MessageBox extends StatelessWidget {
           ),
         ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             if (type.iconData != null)
               Icon(
                 type.iconData,
                 color: type.textColor,
+                size: 16,
               ),
             if (type.iconData != null) const SizedBox(width: 8),
             Expanded(

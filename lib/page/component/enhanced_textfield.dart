@@ -1,5 +1,5 @@
-import 'package:askaide/page/theme/custom_size.dart';
-import 'package:askaide/page/theme/custom_theme.dart';
+import 'package:askaide/page/component/theme/custom_size.dart';
+import 'package:askaide/page/component/theme/custom_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -20,7 +20,7 @@ class InputSelector extends StatelessWidget {
     return TextButton(
       onPressed: onTap,
       style: ButtonStyle(
-        overlayColor: MaterialStateProperty.all(Colors.transparent),
+        overlayColor: WidgetStateProperty.all(Colors.transparent),
       ),
       child: title,
     );
@@ -66,6 +66,8 @@ class EnhancedTextField extends StatefulWidget {
 
   final Widget? middleWidget;
 
+  final Function(bool hasFocus)? onFocusChange;
+
   const EnhancedTextField({
     super.key,
     required this.customColors,
@@ -103,6 +105,7 @@ class EnhancedTextField extends StatefulWidget {
     this.hintTextSize,
     this.labelHelpWidget,
     this.middleWidget,
+    this.onFocusChange,
   });
 
   @override
@@ -112,22 +115,30 @@ class EnhancedTextField extends StatefulWidget {
 class _EnhancedTextFieldState extends State<EnhancedTextField> {
   var textLength = 0;
 
+  late final Function() listener;
+
   @override
   void initState() {
     super.initState();
 
-    widget.controller?.addListener(() {
+    listener = () {
       if (mounted) {
         setState(() {
           textLength = widget.controller!.text.length;
         });
       }
-    });
+    };
+
+    if (widget.showCounter) {
+      widget.controller?.addListener(listener);
+    }
   }
 
   @override
   void dispose() {
-    widget.controller?.removeListener(() {});
+    if (widget.showCounter) {
+      widget.controller?.removeListener(listener);
+    }
     super.dispose();
   }
 
@@ -178,13 +189,24 @@ class _EnhancedTextFieldState extends State<EnhancedTextField> {
             width: widget.labelWidth ?? 80,
             child: widget.labelWidget != null
                 ? widget.labelWidget!
-                : Text(
-                    widget.labelText!,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: widget.labelFontSize ?? 16,
-                      color: widget.customColors.textfieldLabelColor,
-                    ),
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          widget.labelText!,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: widget.labelFontSize ?? 16,
+                            color: widget.customColors.textfieldLabelColor,
+                          ),
+                        ),
+                      ),
+                      if (widget.labelHelpWidget != null) ...[
+                        const SizedBox(width: 5),
+                        widget.labelHelpWidget!,
+                      ]
+                    ],
                   ),
           ),
           const SizedBox(width: 10),
@@ -213,73 +235,76 @@ class _EnhancedTextFieldState extends State<EnhancedTextField> {
             Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextFormField(
-                  initialValue: widget.initValue,
-                  readOnly: widget.readOnly ?? false,
-                  focusNode: widget.focusNode,
-                  controller: widget.controller,
-                  inputFormatters: widget.inputFormatters,
-                  textDirection: widget.textDirection,
-                  obscureText: widget.obscureText ?? false,
-                  enabled: widget.enabled ?? true,
-                  style: TextStyle(
-                    color: widget.customColors.textfieldValueColor,
-                    fontSize: widget.fontSize ?? 15,
-                  ),
-                  decoration: InputDecoration(
-                    filled: widget.enableBackground,
-                    fillColor: widget.customColors.textfieldBackgroundColor,
-                    hintText: widget.hintText,
-                    hintStyle: TextStyle(
-                      fontSize:
-                          widget.hintTextSize ?? CustomSize.defaultHintTextSize,
-                      color: widget.hintColor ??
-                          widget.customColors.textfieldHintColor,
+                Focus(
+                  onFocusChange: widget.onFocusChange,
+                  child: TextFormField(
+                    initialValue: widget.initValue,
+                    readOnly: widget.readOnly ?? false,
+                    focusNode: widget.focusNode,
+                    controller: widget.controller,
+                    inputFormatters: widget.inputFormatters,
+                    textDirection: widget.textDirection,
+                    obscureText: widget.obscureText ?? false,
+                    enabled: widget.enabled ?? true,
+                    style: TextStyle(
+                      color: widget.customColors.textfieldValueColor,
+                      fontSize: widget.fontSize ?? 15,
                     ),
-                    hintTextDirection: widget.textDirection,
-                    counterText: "",
-                    border: resolveInputBorder(),
-                    enabledBorder: resolveInputBorder(),
-                    focusedBorder: resolveInputBorder(),
-                    // isDense: true,
-                    contentPadding: EdgeInsets.only(
-                      top: widget.labelPosition == LabelPosition.top ? 0 : 10,
-                      left: widget.enableBackground ? 15 : 0,
-                      right: widget.enableBackground ? 15 : 0,
-                      bottom:
-                          (widget.showCounter || widget.bottomButton != null) &&
-                                  widget.middleWidget == null
-                              ? 30
-                              : 10,
+                    decoration: InputDecoration(
+                      filled: widget.enableBackground,
+                      fillColor: widget.customColors.textfieldBackgroundColor,
+                      hintText: widget.hintText,
+                      hintStyle: TextStyle(
+                        fontSize: widget.hintTextSize ??
+                            CustomSize.defaultHintTextSize,
+                        color: widget.hintColor ??
+                            widget.customColors.textfieldHintColor,
+                      ),
+                      hintTextDirection: widget.textDirection,
+                      counterText: "",
+                      border: resolveInputBorder(),
+                      enabledBorder: resolveInputBorder(),
+                      focusedBorder: resolveInputBorder(),
+                      // isDense: true,
+                      contentPadding: EdgeInsets.only(
+                        top: widget.labelPosition == LabelPosition.top ? 0 : 10,
+                        left: widget.enableBackground ? 15 : 0,
+                        right: widget.enableBackground ? 15 : 0,
+                        bottom: (widget.showCounter ||
+                                    widget.bottomButton != null) &&
+                                widget.middleWidget == null
+                            ? 30
+                            : 10,
+                      ),
+                      labelText: widget.labelPosition == LabelPosition.inner
+                          ? widget.labelText
+                          : null,
+                      labelStyle: TextStyle(
+                        color: widget.customColors.textfieldLabelColor,
+                      ),
+                      suffixIcon: widget.suffixIcon ??
+                          (widget.labelPosition == LabelPosition.left
+                              ? widget.inputSelector
+                              : null),
                     ),
-                    labelText: widget.labelPosition == LabelPosition.inner
-                        ? widget.labelText
-                        : null,
-                    labelStyle: TextStyle(
-                      color: widget.customColors.textfieldLabelColor,
-                    ),
-                    suffixIcon: widget.suffixIcon ??
-                        (widget.labelPosition == LabelPosition.left
-                            ? widget.inputSelector
-                            : null),
-                  ),
-                  cursorRadius: const Radius.circular(10),
-                  keyboardType: widget.keyboardType,
-                  autofocus: widget.autofocus ?? false,
-                  maxLength: widget.maxLength,
-                  minLines: widget.minLines,
-                  maxLines: widget.maxLines,
-                  onChanged: widget.controller == null
-                      ? (value) {
-                          setState(() {
-                            textLength = value.length;
-                          });
+                    cursorRadius: CustomSize.radius,
+                    keyboardType: widget.keyboardType,
+                    autofocus: widget.autofocus ?? false,
+                    maxLength: widget.maxLength,
+                    minLines: widget.minLines,
+                    maxLines: widget.maxLines,
+                    onChanged: widget.controller == null
+                        ? (value) {
+                            setState(() {
+                              textLength = value.length;
+                            });
 
-                          if (widget.onChanged != null) {
-                            widget.onChanged!(value);
+                            if (widget.onChanged != null) {
+                              widget.onChanged!(value);
+                            }
                           }
-                        }
-                      : null,
+                        : null,
+                  ),
                 ),
                 widget.middleWidget ?? const SizedBox(),
               ],
@@ -313,8 +338,7 @@ class _EnhancedTextFieldState extends State<EnhancedTextField> {
                   padding: const EdgeInsets.all(0),
                   minWidth: 60,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+                      borderRadius: CustomSize.borderRadius),
                   onPressed: widget.bottomButtonOnPressed,
                   child: widget.bottomButton!,
                 ),
@@ -327,10 +351,9 @@ class _EnhancedTextFieldState extends State<EnhancedTextField> {
 
   InputBorder resolveInputBorder() {
     if (widget.enableBackground) {
-      return OutlineInputBorder(
-        borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide.none,
-      );
+      return const OutlineInputBorder(
+          borderRadius: CustomSize.borderRadiusAll,
+          borderSide: BorderSide.none);
     }
 
     return InputBorder.none;

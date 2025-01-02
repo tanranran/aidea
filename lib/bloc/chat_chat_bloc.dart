@@ -2,6 +2,7 @@ import 'package:askaide/helper/constant.dart';
 import 'package:askaide/repo/api_server.dart';
 import 'package:askaide/repo/chat_message_repo.dart';
 import 'package:askaide/repo/model/chat_history.dart';
+import 'package:askaide/repo/model/misc.dart';
 import 'package:bloc/bloc.dart';
 import 'package:meta/meta.dart';
 
@@ -15,13 +16,13 @@ class ChatChatBloc extends Bloc<ChatChatEvent, ChatChatState> {
     on<ChatChatLoadRecentHistories>((event, emit) async {
       final histories = await _chatMessageRepository.recentChatHistories(
         chatAnywhereRoomId,
-        30,
+        event.count,
         userId: APIServer().localUserID(),
       );
 
       emit(ChatChatRecentHistoriesLoaded(
         histories: histories,
-        examples: await APIServer().example('openai:$defaultChatModel'),
+        examples: const [],
       ));
     });
 

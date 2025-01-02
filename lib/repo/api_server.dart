@@ -1,24 +1,36 @@
 import 'dart:convert';
 
 import 'package:askaide/helper/constant.dart';
+import 'package:askaide/helper/env.dart';
 import 'package:askaide/helper/error.dart';
+import 'package:askaide/helper/event.dart';
 import 'package:askaide/helper/http.dart';
 import 'package:askaide/helper/logger.dart';
 import 'package:askaide/helper/platform.dart';
+import 'package:askaide/page/component/global_alert.dart';
+import 'package:askaide/repo/api/admin/channels.dart';
+import 'package:askaide/repo/api/admin/models.dart';
+import 'package:askaide/repo/api/admin/payment.dart';
+import 'package:askaide/repo/api/admin/users.dart';
+import 'package:askaide/repo/api/article.dart';
 import 'package:askaide/repo/api/creative.dart';
 import 'package:askaide/repo/api/image_model.dart';
+import 'package:askaide/repo/api/info.dart';
+import 'package:askaide/repo/api/keys.dart';
+import 'package:askaide/repo/api/model.dart';
+import 'package:askaide/repo/api/notification.dart';
 import 'package:askaide/repo/api/page.dart';
 import 'package:askaide/repo/api/payment.dart';
 import 'package:askaide/repo/api/quota.dart';
 import 'package:askaide/repo/api/room_gallery.dart';
 import 'package:askaide/repo/api/user.dart';
+import 'package:askaide/repo/model/group.dart';
+import 'package:askaide/repo/model/misc.dart';
 import 'package:askaide/repo/settings_repo.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 class APIServer {
-  static const String url = apiServerURL;
-
   /// 单例
   static final APIServer _instance = APIServer._internal();
   APIServer._internal();
@@ -27,12 +39,21 @@ class APIServer {
     return _instance;
   }
 
+  GlobalAlertEvent _globalAlertEvent = GlobalAlertEvent(id: '', type: 'info', pages: [], message: '');
+
+  GlobalAlertEvent get globalAlertEvent => _globalAlertEvent;
+
+  late String url;
   late String apiToken;
   late String language;
 
   init(SettingRepository setting) {
     apiToken = setting.stringDefault(settingAPIServerToken, '');
     language = setting.stringDefault(settingLanguage, 'zh');
+    url = setting.stringDefault(settingServerURL, apiServerURL);
+
+    Logger.instance.d('API Server URL: $url');
+
     setting.listen((settings, key, value) {
       if (key == settingAPIServerToken) {
         apiToken = settings.getDefault(settingAPIServerToken, '');
@@ -41,24 +62,29 @@ class APIServer {
       if (key == settingLanguage) {
         language = settings.getDefault(settingLanguage, 'zh');
       }
+
+      if (key == settingServerURL) {
+        url = settings.getDefault(settingServerURL, apiServerURL);
+        Logger.instance.d('API Server URL Changed: $url');
+      }
     });
   }
 
-  final List<DioErrorType> _retryableErrors = [
-    DioErrorType.connectTimeout,
-    DioErrorType.sendTimeout,
-    DioErrorType.receiveTimeout,
+  final List<DioExceptionType> _retryableErrors = [
+    DioExceptionType.connectionTimeout,
+    DioExceptionType.sendTimeout,
+    DioExceptionType.receiveTimeout,
   ];
 
   /// 异常处理
-  Object _exceptionHandle(Object e) {
-    Logger.instance.e(e);
+  Object _exceptionHandle(Object e, Object? stackTrace) {
+    Logger.instance.e(e, stackTrace: stackTrace as StackTrace?);
 
-    if (e is DioError) {
+    if (e is DioException) {
       if (e.response != null) {
         final resp = e.response!;
 
-        if (resp.data is Map && resp.data['error'] != null) {
+        if (resp.data is Map && resp.data['error'] != null && resp.statusCode != 402 && resp.statusCode != 401) {
           return resp.data['error'] ?? e.toString();
         }
 
@@ -80,18 +106,18 @@ class APIServer {
     return e.toString();
   }
 
-  Options _buildRequestOptions() {
+  Options _buildRequestOptions({int? requestTimeout = 10000}) {
     return Options(
       headers: _buildAuthHeaders(),
       receiveDataWhenStatusError: true,
-      sendTimeout: 10000,
-      receiveTimeout: 10000,
+      sendTimeout: requestTimeout != null ? Duration(milliseconds: requestTimeout) : null,
+      receiveTimeout: requestTimeout != null ? Duration(milliseconds: requestTimeout) : null,
     );
   }
 
   Map<String, dynamic> _buildAuthHeaders() {
     final headers = <String, dynamic>{
-      'X-CLIENT-VERSION': VERSION,
+      'X-CLIENT-VERSION': clientVersion,
       'X-PLATFORM': PlatformTool.operatingSystem(),
       'X-PLATFORM-VERSION': PlatformTool.operatingSystemVersion(),
       'X-LANGUAGE': language,
@@ -129,12 +155,13 @@ class APIServer {
     String endpoint,
     T Function(dynamic) parser, {
     Map<String, dynamic>? queryParameters,
+    int? requestTimeout = 10000,
   }) async {
     return request(
       HttpClient.get(
         '$url$endpoint',
         queryParameters: queryParameters,
-        options: _buildRequestOptions(),
+        options: _buildRequestOptions(requestTimeout: requestTimeout),
       ),
       parser,
     );
@@ -180,6 +207,25 @@ class APIServer {
     );
   }
 
+  Future<T> sendPostJSONRequest<T>(
+    String endpoint,
+    T Function(dynamic) parser, {
+    Map<String, dynamic>? queryParameters,
+    Map<String, dynamic>? data,
+    VoidCallback? finallyCallback,
+  }) async {
+    return request(
+      HttpClient.postJSON(
+        '$url$endpoint',
+        queryParameters: queryParameters,
+        data: data,
+        options: _buildRequestOptions(),
+      ),
+      parser,
+      finallyCallback: finallyCallback,
+    );
+  }
+
   Future<T> sendPutRequest<T>(
     String endpoint,
     T Function(dynamic) parser, {
@@ -195,6 +241,28 @@ class APIServer {
         '$url$endpoint',
         queryParameters: queryParameters,
         formData: formData,
+        options: _buildRequestOptions(),
+      ),
+      parser,
+      finallyCallback: finallyCallback,
+    );
+  }
+
+  Future<T> sendPutJSONRequest<T>(
+    String endpoint,
+    T Function(dynamic) parser, {
+    String? subKey,
+    Duration duration = const Duration(days: 1),
+    Map<String, dynamic>? queryParameters,
+    Map<String, dynamic>? data,
+    bool forceRefresh = false,
+    VoidCallback? finallyCallback,
+  }) async {
+    return request(
+      HttpClient.putJSON(
+        '$url$endpoint',
+        queryParameters: queryParameters,
+        data: data,
         options: _buildRequestOptions(),
       ),
       parser,
@@ -231,15 +299,35 @@ class APIServer {
   }) async {
     try {
       final resp = await respFuture;
-      if (resp.statusCode != 200) {
+      if (resp.statusCode != 200 && resp.statusCode != 304) {
         return Future.error(resp.data['error']);
       }
 
-      // Logger.instance.d(resp.data);
+      try {
+        var msg = resp.headers.value('aidea-global-alert-msg');
+        if (msg != null) {
+          msg = utf8.decode(base64Decode(msg));
+        }
+
+        // Logger.instance.d("API Response: ${resp.data}");
+        final globalAlertEvent = GlobalAlertEvent(
+          id: resp.headers.value('aidea-global-alert-id') ?? '',
+          type: resp.headers.value('aidea-global-alert-type') ?? 'info',
+          pages: (resp.headers.value('aidea-global-alert-pages') ?? '').split(',').where((e) => e != '').toList(),
+          message: msg,
+        );
+
+        if (globalAlertEvent.id != '' && globalAlertEvent.id != _globalAlertEvent.id) {
+          _globalAlertEvent = globalAlertEvent;
+          GlobalEvent().emit('global-alert', _globalAlertEvent);
+        }
+      } catch (e) {
+        Logger.instance.e(e);
+      }
 
       return parser(resp);
-    } catch (e) {
-      return Future.error(_exceptionHandle(e));
+    } catch (e, stackTrace) {
+      return Future.error(_exceptionHandle(e, stackTrace));
     } finally {
       finallyCallback?.call();
     }
@@ -290,6 +378,7 @@ class APIServer {
     required String verifyCodeId,
     required String verifyCode,
     String? inviteCode,
+    String? wechatBindToken,
   }) async {
     return sendPostRequest(
       '/v1/auth/2in1/sign-inup',
@@ -299,19 +388,24 @@ class APIServer {
         'verify_code_id': verifyCodeId,
         'verify_code': verifyCode,
         'invite_code': inviteCode,
+        'wechat_bind_token': wechatBindToken,
       }),
     );
   }
 
   /// 使用密码登录
   Future<SignInResp> signInWithPassword(
-      String username, String password) async {
+    String username,
+    String password, {
+    String? wechatBindToken,
+  }) async {
     return sendPostRequest(
       '/v1/auth/sign-in',
       (resp) => SignInResp.fromJson(resp.data),
       formData: Map<String, dynamic>.from({
         'username': username,
         'password': password,
+        'wechat_bind_token': wechatBindToken,
       }),
     );
   }
@@ -324,6 +418,7 @@ class APIServer {
     String? email,
     String? authorizationCode,
     String? identityToken,
+    String? wechatBindToken,
   }) async {
     return sendPostRequest(
       '/v1/auth/sign-in-apple/',
@@ -336,6 +431,44 @@ class APIServer {
         'authorization_code': authorizationCode,
         'identity_token': identityToken,
         'is_ios': PlatformTool.isIOS() || PlatformTool.isMacOS(),
+        'wechat_bind_token': wechatBindToken,
+      }),
+    );
+  }
+
+  /// 尝试使用 微信账号登录
+  Future<TrySignInResp> trySignInWithWechat({
+    required String code,
+  }) async {
+    return sendPostRequest(
+      '/v1/auth/sign-in-wechat/try',
+      (resp) => TrySignInResp.fromJson(resp.data),
+      formData: Map<String, dynamic>.from({
+        'code': code,
+      }),
+    );
+  }
+
+  /// 使用 微信账号登录
+  Future<SignInResp> signInWithWechat({
+    required String token,
+  }) async {
+    return sendPostRequest(
+      '/v1/auth/sign-in-wechat/',
+      (resp) => SignInResp.fromJson(resp.data),
+      formData: Map<String, dynamic>.from({
+        'token': token,
+      }),
+    );
+  }
+
+  /// 绑定微信账号
+  Future<void> bindWechat({required String code}) async {
+    return sendPostRequest(
+      '/v1/auth/bind-wechat/',
+      (resp) => {},
+      formData: Map<String, dynamic>.from({
+        'code': code,
       }),
     );
   }
@@ -344,16 +477,15 @@ class APIServer {
   Future<List<String>> proxyServers(String service) async {
     return sendCachedGetRequest(
       '/v1/proxy/servers',
-      (resp) =>
-          (resp['servers'][service] as List).map((e) => e.toString()).toList(),
+      (resp) => (resp['servers'][service] as List).map((e) => e.toString()).toList(),
       subKey: _cacheSubKey(),
     );
   }
 
   /// 获取模型列表
-  Future<List<Model>> models() async {
+  Future<List<Model>> models({bool cache = true, bool withCustom = false}) async {
     return sendCachedGetRequest(
-      '/v1/models',
+      '/v2/models',
       (resp) {
         var models = <Model>[];
         for (var model in resp.data) {
@@ -362,7 +494,11 @@ class APIServer {
 
         return models;
       },
+      queryParameters: {
+        "with-custom": withCustom,
+      },
       subKey: _cacheSubKey(),
+      forceRefresh: !cache,
     );
   }
 
@@ -407,9 +543,7 @@ class APIServer {
     return sendCachedGetRequest(
       '/v1/images/avatar',
       (resp) {
-        return (resp.data['avatars'] as List<dynamic>)
-            .map((e) => e.toString())
-            .toList();
+        return (resp.data['avatars'] as List<dynamic>).map((e) => e.toString()).toList();
       },
     );
   }
@@ -470,9 +604,7 @@ class APIServer {
           examples.add(ChatExample(
             example['title'],
             content: example['content'],
-            models: ((example['models'] ?? []) as List<dynamic>)
-                .map((e) => e.toString())
-                .toList(),
+            models: ((example['models'] ?? []) as List<dynamic>).map((e) => e.toString()).toList(),
           ));
         }
         return examples;
@@ -502,16 +634,14 @@ class APIServer {
   /// 获取模型支持的提示语示例
   Future<List<ChatExample>> example(String model) async {
     return sendCachedGetRequest(
-      '/v1/examples/$model',
+      '/v1/examples/${Uri.encodeComponent(model)}',
       (resp) {
         var examples = <ChatExample>[];
         for (var example in resp.data) {
           examples.add(ChatExample(
             example['title'],
             content: example['content'],
-            models: ((example['models'] ?? []) as List<dynamic>)
-                .map((e) => e.toString())
-                .toList(),
+            models: ((example['models'] ?? []) as List<dynamic>).map((e) => e.toString()).toList(),
           ));
         }
         return examples;
@@ -547,9 +677,7 @@ class APIServer {
         for (var item in resp.data['items']) {
           items.add(CreativeIslandItem.fromJson(item));
         }
-        final categories = (resp.data['categories'] as List<dynamic>)
-            .map((e) => e.toString())
-            .toList();
+        final categories = (resp.data['categories'] as List<dynamic>).map((e) => e.toString()).toList();
         return CreativeIslandItems(
           items,
           categories,
@@ -573,8 +701,7 @@ class APIServer {
   }
 
   /// 创作岛生成消耗量预估
-  Future<QuotaEvaluated> creativeIslandCompletionsEvaluate(
-      String id, Map<String, dynamic> params) async {
+  Future<QuotaEvaluated> creativeIslandCompletionsEvaluate(String id, Map<String, dynamic> params) async {
     return sendPostRequest(
       '/v1/creative-island/completions/$id/evaluate',
       (resp) => QuotaEvaluated.fromJson(resp.data),
@@ -583,8 +710,7 @@ class APIServer {
   }
 
   /// 创意岛项目生成数据
-  Future<List<String>> creativeIslandCompletions(
-      String id, Map<String, dynamic> params) async {
+  Future<List<String>> creativeIslandCompletions(String id, Map<String, dynamic> params) async {
     return sendPostRequest(
       '/v1/creative-island/completions/$id',
       (resp) {
@@ -601,8 +727,7 @@ class APIServer {
   }
 
   /// 创意岛项目生成数据
-  Future<String> creativeIslandCompletionsAsync(
-      String id, Map<String, dynamic> params) async {
+  Future<String> creativeIslandCompletionsAsync(String id, Map<String, dynamic> params) async {
     params["mode"] = 'async';
 
     return sendPostRequest(
@@ -615,8 +740,7 @@ class APIServer {
     );
   }
 
-  Future<QuotaEvaluated> creativeIslandCompletionsEvaluateV2(
-      Map<String, dynamic> params) async {
+  Future<QuotaEvaluated> creativeIslandCompletionsEvaluateV2(Map<String, dynamic> params) async {
     return sendPostRequest(
       '/v2/creative-island/completions/evaluate',
       (resp) => QuotaEvaluated.fromJson(resp.data),
@@ -624,10 +748,31 @@ class APIServer {
     );
   }
 
-  Future<String> creativeIslandCompletionsAsyncV2(
-      Map<String, dynamic> params) async {
+  Future<String> creativeIslandCompletionsAsyncV2(Map<String, dynamic> params) async {
     return sendPostRequest(
       '/v2/creative-island/completions',
+      (resp) {
+        final cicResp = CreativeIslandCompletionAsyncResp.fromJson(resp.data);
+        return cicResp.taskId;
+      },
+      formData: params,
+    );
+  }
+
+  Future<String> creativeIslandArtisticTextCompletionsAsyncV2(Map<String, dynamic> params) async {
+    return sendPostRequest(
+      '/v2/creative-island/completions/artistic-text',
+      (resp) {
+        final cicResp = CreativeIslandCompletionAsyncResp.fromJson(resp.data);
+        return cicResp.taskId;
+      },
+      formData: params,
+    );
+  }
+
+  Future<String> creativeIslandImageToVideoCompletionsAsyncV2(Map<String, dynamic> params) async {
+    return sendPostRequest(
+      '/v2/creative-island/completions/image-to-video',
       (resp) {
         final cicResp = CreativeIslandCompletionAsyncResp.fromJson(resp.data);
         return cicResp.taskId;
@@ -666,8 +811,7 @@ class APIServer {
   }
 
   /// 创作岛能力
-  Future<CreativeIslandCapacity> creativeIslandCapacity(
-      {required String mode, required String id}) async {
+  Future<CreativeIslandCapacity> creativeIslandCapacity({required String mode, required String id}) async {
     return sendCachedGetRequest(
       '/v2/creative-island/capacity',
       (resp) {
@@ -859,31 +1003,25 @@ class APIServer {
   }
 
   /// 版本检查
-  Future<VersionCheckResp> versionCheck() async {
-    return sendPostRequest(
+  Future<VersionCheckResp> versionCheck({bool cache = true}) async {
+    return sendCachedGetRequest(
       '/public/info/version-check',
       (resp) => VersionCheckResp.fromJson(resp.data),
-      formData: Map<String, dynamic>.from({
-        'version': VERSION,
+      queryParameters: Map<String, dynamic>.from({
+        'version': clientVersion,
         'os': PlatformTool.operatingSystem(),
         'os_version': PlatformTool.operatingSystemVersion(),
       }),
+      duration: const Duration(minutes: 180),
+      forceRefresh: !cache,
     );
   }
 
-  /// Apple 支付项目列表
-  Future<ApplePayProducts> applePayProducts() async {
+  /// 支付项目列表
+  Future<PaymentProducts> paymentProducts() async {
     return sendGetRequest(
-      '/v1/payment/apple/products',
-      (resp) => ApplePayProducts.fromJson(resp.data),
-    );
-  }
-
-  /// 支付宝支付项目列表
-  Future<ApplePayProducts> alipayProducts() async {
-    return sendGetRequest(
-      '/v1/payment/alipay/products',
-      (resp) => ApplePayProducts.fromJson(resp.data),
+      '/v1/payment/products',
+      (resp) => PaymentProducts.fromJson(resp.data),
     );
   }
 
@@ -898,23 +1036,32 @@ class APIServer {
     );
   }
 
-  /// 发起 Alipay
-  Future<AlipayCreatedReponse> createAlipay(String productId) async {
+  /// 发起支付
+  Future<OtherPayCreatedReponse> createOtherPay(String productId, {required String source}) async {
     return sendPostRequest(
-      '/v1/payment/alipay',
-      (resp) => AlipayCreatedReponse.fromJson(resp.data),
+      '/v1/payment/others',
+      (resp) => OtherPayCreatedReponse.fromJson(resp.data),
       formData: Map<String, dynamic>.from({
         'product_id': productId,
+        'source': source,
       }),
     );
   }
 
-  /// 支付宝支付客户端确认
-  Future<String> alipayClientConfirm(Map<String, dynamic> params) async {
+  /// 其它支付客户端确认
+  Future<String> otherPayClientConfirm(Map<String, dynamic> params) async {
     return sendPostRequest(
-      '/v1/payment/alipay/client-confirm',
+      '/v1/payment/others/client-confirm',
       (resp) => resp.data['status'],
       formData: params,
+    );
+  }
+
+  /// 查询支付状态
+  Future<PaymentStatus> queryPaymentStatus(String paymentId) async {
+    return sendGetRequest(
+      '/v1/payment/status/$paymentId',
+      (resp) => PaymentStatus.fromJson(resp.data),
     );
   }
 
@@ -998,6 +1145,49 @@ class APIServer {
     );
   }
 
+  /// 创建群聊房间
+  Future<int> createGroupRoom({
+    required String name,
+    String? description,
+    String? avatarUrl,
+    List<GroupMember>? members,
+  }) async {
+    return sendPostJSONRequest(
+      '/v1/group-chat',
+      (resp) => resp.data["group_id"],
+      data: {
+        'name': name,
+        'avatar_url': avatarUrl,
+        'members': members?.map((e) => e.toJson()).toList(),
+      },
+      finallyCallback: () {
+        HttpClient.cleanCache();
+      },
+    );
+  }
+
+  /// 更新群聊房间
+  Future<void> updateGroupRoom({
+    required int groupId,
+    required String name,
+    String? description,
+    String? avatarUrl,
+    List<GroupMember>? members,
+  }) async {
+    return sendPutJSONRequest(
+      '/v1/group-chat/$groupId',
+      (resp) {},
+      data: {
+        'name': name,
+        'avatar_url': avatarUrl,
+        'members': members?.map((e) => e.toJson()).toList(),
+      },
+      finallyCallback: () {
+        HttpClient.cleanCache();
+      },
+    );
+  }
+
   /// 创建房间
   Future<int> createRoom({
     required String name,
@@ -1025,8 +1215,7 @@ class APIServer {
         'init_message': initMessage,
       }),
       finallyCallback: () {
-        HttpClient.cacheManager
-            .deleteByPrimaryKey('$url/v2/rooms', requestMethod: 'GET');
+        HttpClient.cleanCache();
       },
     );
   }
@@ -1059,10 +1248,7 @@ class APIServer {
         'init_message': initMessage,
       }),
       finallyCallback: () {
-        HttpClient.cacheManager
-            .deleteByPrimaryKey('$url/v2/rooms', requestMethod: 'GET');
-        HttpClient.cacheManager
-            .deleteByPrimaryKey('$url/v1/rooms/$roomId', requestMethod: 'GET');
+        HttpClient.cleanCache();
       },
     );
   }
@@ -1073,10 +1259,7 @@ class APIServer {
       '/v1/rooms/$roomId',
       (resp) {},
       finallyCallback: () {
-        HttpClient.cacheManager
-            .deleteByPrimaryKey('$url/v2/rooms', requestMethod: 'GET');
-        HttpClient.cacheManager
-            .deleteByPrimaryKey('$url/v1/rooms/$roomId', requestMethod: 'GET');
+        HttpClient.cleanCache();
       },
     );
   }
@@ -1192,9 +1375,16 @@ class APIServer {
     );
   }
 
+  /// 封禁创作岛历史记录
+  Future<void> forbidCreativeHistoryItem({required int historyId}) {
+    return sendPutRequest(
+      '/v1/admin/creative-island/histories/$historyId/forbid',
+      (resp) {},
+    );
+  }
+
   /// 创作岛历史记录
-  Future<List<CreativeItemInServer>> creativeItemHistories(String islandId,
-      {bool cache = true}) async {
+  Future<List<CreativeItemInServer>> creativeItemHistories(String islandId, {bool cache = true}) async {
     return sendCachedGetRequest(
       '/v1/creative-island/items/$islandId/histories',
       (resp) {
@@ -1226,8 +1416,7 @@ class APIServer {
   }
 
   /// 删除创作岛项目历史记录
-  Future<void> deleteCreativeHistoryItem(String islandId,
-      {required hisId}) async {
+  Future<void> deleteCreativeHistoryItem(String islandId, {required hisId}) async {
     return sendDeleteRequest(
       '/v1/creative-island/items/$islandId/histories/$hisId',
       (resp) {},
@@ -1249,6 +1438,21 @@ class APIServer {
       subKey: _cacheSubKey(),
       forceRefresh: !cache,
       duration: const Duration(minutes: 30),
+    );
+  }
+
+  /// 获取用户智慧果消耗历史记录详情
+  Future<List<QuotaUsageDetailInDay>> quotaUsedDetails({required String date}) async {
+    return sendGetRequest(
+      '/v1/users/quota/usage-stat/$date',
+      (resp) {
+        var res = <QuotaUsageDetailInDay>[];
+        for (var item in resp.data['data']) {
+          res.add(QuotaUsageDetailInDay.fromJson(item));
+        }
+
+        return res;
+      },
     );
   }
 
@@ -1282,13 +1486,13 @@ class APIServer {
     );
   }
 
-  Future<CreativeGallery> creativeGalleryItem({
+  Future<CreativeGalleryItemResponse> creativeGalleryItem({
     required int id,
     bool cache = true,
   }) async {
     return sendCachedGetRequest(
       '/v1/creatives/gallery/$id',
-      (resp) => CreativeGallery.fromJson(resp.data),
+      (resp) => CreativeGalleryItemResponse.fromJson(resp.data),
       forceRefresh: !cache,
       duration: const Duration(minutes: 30),
     );
@@ -1299,9 +1503,7 @@ class APIServer {
     return sendPostRequest(
       '/v1/voice/text2voice',
       formData: {'text': text},
-      (resp) => (resp.data['results'] as List<dynamic>)
-          .map((e) => e.toString())
-          .toList(),
+      (resp) => (resp.data['results'] as List<dynamic>).map((e) => e.toString()).toList(),
     );
   }
 
@@ -1340,8 +1542,7 @@ class APIServer {
     );
   }
 
-  Future<RoomGallery> roomGalleryItem(
-      {required int id, bool cache = true}) async {
+  Future<RoomGallery> roomGalleryItem({required int id, bool cache = true}) async {
     return sendCachedGetRequest(
       '/v1/room-galleries/$id',
       (resp) => RoomGallery.fromJson(resp.data),
@@ -1358,8 +1559,7 @@ class APIServer {
     );
   }
 
-  Future<List<CreativeIslandItemV2>> creativeIslandItemsV2(
-      {bool cache = true}) async {
+  Future<List<CreativeIslandItemV2>> creativeIslandItemsV2({bool cache = true}) async {
     return sendCachedGetRequest(
       '/v2/creative/items',
       (resp) {
@@ -1397,8 +1597,7 @@ class APIServer {
       (resp) {},
       formData: {'avatar_url': avatarURL},
       finallyCallback: () {
-        HttpClient.cacheManager
-            .deleteByPrimaryKey('$url/v1/users/current', requestMethod: 'GET');
+        HttpClient.cleanCache();
       },
     );
   }
@@ -1410,527 +1609,651 @@ class APIServer {
       (resp) {},
       formData: {'realname': realname},
       finallyCallback: () {
-        HttpClient.cacheManager
-            .deleteByPrimaryKey('$url/v1/users/current', requestMethod: 'GET');
+        HttpClient.cleanCache();
       },
     );
   }
-}
 
-class ShareInfo {
-  String qrCode;
-  String message;
-  String? inviteCode;
+  /// 服务器支持的能力
+  Future<Capabilities> capabilities({bool cache = true}) async {
+    return sendCachedGetRequest(
+      '/public/info/capabilities',
+      (resp) => Capabilities.fromJson(resp.data),
+      forceRefresh: !cache,
+    );
+  }
 
-  ShareInfo({
-    required this.qrCode,
-    required this.message,
-    this.inviteCode,
-  });
+  /// 用户免费聊天次数统计
+  Future<List<FreeModelCount>> userFreeStatistics() async {
+    return sendGetRequest(
+      '/v1/users/stat/free-chat-counts',
+      (resp) {
+        var items = <FreeModelCount>[];
+        for (var item in resp.data['data']) {
+          items.add(FreeModelCount.fromJson(item));
+        }
+        return items;
+      },
+    );
+  }
 
-  toJson() => {
-        'qr_code': qrCode,
+  /// 免费聊天次数统计(登录不登录都可以访问)
+  Future<List<FreeModelCount>> freeChatCounts() async {
+    return sendGetRequest(
+      '/public/info/free-chat-counts',
+      (resp) {
+        var items = <FreeModelCount>[];
+        for (var item in resp.data['data']) {
+          items.add(FreeModelCount.fromJson(item));
+        }
+        return items;
+      },
+    );
+  }
+
+  /// 用户免费聊天次数统计(单个模型)
+  Future<FreeModelCount> userFreeStatisticsForModel({required String model}) async {
+    return sendGetRequest(
+      '/v1/users/stat/free-chat-counts/${Uri.encodeComponent(model)}',
+      (resp) => FreeModelCount.fromJson(resp.data),
+    );
+  }
+
+  /// 通知信息（促销事件）
+  Future<Map<String, List<PromotionEvent>>> notificationPromotionEvents({bool cache = true}) async {
+    return sendCachedGetRequest(
+      '/v1/notifications/promotions',
+      (value) {
+        var res = <String, List<PromotionEvent>>{};
+        for (var item in value.data['data']) {
+          if (res[item['id']] == null) {
+            res[item['id']] = [];
+          }
+
+          res[item['id']] = [
+            ...res[item['id']]!,
+            PromotionEvent.fromJson(item),
+          ];
+        }
+
+        return res;
+      },
+      subKey: _cacheSubKey(),
+      forceRefresh: !cache,
+    );
+  }
+
+  /// 更新自定义模型
+  Future<void> updateCustomHomeModels({required List<String> models}) async {
+    return sendPostRequest(
+      '/v1/users/custom/home-models',
+      (value) => {},
+      formData: {
+        'models': models.join(','),
+      },
+    );
+  }
+
+  /// 自定义首页模型 v2
+  Future<List<HomeModelV2>> customHomeModelsV2({bool cache = true}) async {
+    return sendCachedGetRequest(
+      '/v2/models/home-models/all',
+      (value) {
+        var res = <HomeModelV2>[];
+        for (var item in value.data['data']) {
+          res.add(HomeModelV2.fromJson(item));
+        }
+
+        return res;
+      },
+      forceRefresh: !cache,
+    );
+  }
+
+  /// 自定义首页模型 v2 详情
+  Future<HomeModelV2> customHomeModelsItemV2({
+    bool cache = true,
+    required String uniqueKey,
+  }) async {
+    return sendCachedGetRequest(
+      '/v2/models/home-models/${Uri.encodeComponent(uniqueKey)}',
+      (value) {
+        return HomeModelV2.fromJson(value.data['data']);
+      },
+      forceRefresh: !cache,
+    );
+  }
+
+  /// 更新自定义模型 v2
+  /// 模型 ID 使用 type:id 形式
+  Future<void> updateCustomHomeModelsV2({required List<String> models}) async {
+    return sendPostRequest(
+      '/v2/users/custom/home-models',
+      (value) => {},
+      formData: {
+        'models': models.join(','),
+      },
+    );
+  }
+
+  /// 群聊 ////////////////////////////////////////////////////////////////////
+
+  /// 群组列表
+  Future<List<RoomInServer>> chatGroups({bool cache = true}) async {
+    return sendCachedGetRequest(
+      '/v1/group-chat',
+      (value) {
+        var res = <RoomInServer>[];
+        for (var item in value.data['data']) {
+          res.add(RoomInServer.fromJson(item));
+        }
+
+        return res;
+      },
+      forceRefresh: !cache,
+    );
+  }
+
+  /// 群组详情
+  Future<ChatGroup> chatGroup(int groupId, {bool cache = true}) async {
+    return sendCachedGetRequest(
+      '/v1/group-chat/$groupId',
+      (value) => ChatGroup.fromJson(value.data),
+      forceRefresh: !cache,
+    );
+  }
+
+  /// 群组聊天消息列表
+  Future<OffsetPageData<GroupMessage>> chatGroupMessages(
+    int groupId, {
+    int startId = 0,
+    int? perPage,
+    bool cache = true,
+  }) async {
+    return sendCachedGetRequest(
+      '/v1/group-chat/$groupId/messages',
+      (resp) {
+        var res = <GroupMessage>[];
+        for (var item in resp.data['data']) {
+          res.add(GroupMessage.fromJson(item));
+        }
+
+        return OffsetPageData(
+          data: res,
+          lastId: resp.data['last_id'],
+          startId: resp.data['start_id'],
+          perPage: resp.data['per_page'],
+        );
+      },
+      queryParameters: {
+        'start_id': startId,
+        'per_page': perPage,
+      },
+      forceRefresh: !cache,
+    );
+  }
+
+  /// 发起群聊消息
+  Future<GroupChatSendResponse> chatGroupSendMessage(int groupId, GroupChatSendRequest req) async {
+    return sendPostJSONRequest(
+      '/v1/group-chat/$groupId/chat',
+      (resp) {
+        return GroupChatSendResponse.fromJson(resp.data);
+      },
+      data: req.toJson(),
+    );
+  }
+
+  /// 群聊发送系统消息
+  Future<GroupMessage> chatGroupSendSystemMessage(
+    int groupId, {
+    required String messageType,
+    String? message,
+  }) async {
+    return sendPostRequest(
+      '/v1/group-chat/$groupId/chat-system',
+      (resp) => GroupMessage.fromJson(resp['data']),
+      formData: {
+        'message_type': messageType,
         'message': message,
-        'invite_code': inviteCode,
-      };
-
-  static ShareInfo fromJson(Map<String, dynamic> json) {
-    return ShareInfo(
-      qrCode: json['qr_code'],
-      message: json['message'],
-      inviteCode: json['invite_code'],
+      },
     );
   }
-}
 
-class QuotaUsageInDay {
-  String date;
-  int used;
+  /// 群组聊天消息状态
+  Future<List<GroupMessage>> chatGroupMessageStatus(int groupId, List<int> messageIds) async {
+    return sendGetRequest(
+      '/v1/group-chat/$groupId/chat-messages',
+      (resp) {
+        var res = <GroupMessage>[];
+        for (var item in resp.data['data']) {
+          res.add(GroupMessage.fromJson(item));
+        }
 
-  QuotaUsageInDay({
-    required this.date,
-    required this.used,
-  });
-
-  toJson() => {
-        'date': date,
-        'used': used,
-      };
-
-  static QuotaUsageInDay fromJson(Map<String, dynamic> json) {
-    return QuotaUsageInDay(
-      date: json['date'],
-      used: json['used'],
+        return res;
+      },
+      queryParameters: {
+        "message_ids": messageIds.join(','),
+      },
     );
   }
-}
 
-class RoomsResponse {
-  List<RoomInServer> rooms;
-  List<RoomGallery>? suggests;
+  /// 清空群组聊天消息
+  Future<void> chatGroupDeleteAllMessages(int groupId) async {
+    return sendDeleteRequest('/v1/group-chat/$groupId/all-chat', (resp) {});
+  }
 
-  RoomsResponse({
-    required this.rooms,
-    this.suggests,
-  });
+  /// 删除群组聊天消息
+  Future<void> chatGroupDeleteMessage(int groupId, int messageId) async {
+    return sendDeleteRequest('/v1/group-chat/$groupId/chat/$messageId', (resp) {});
+  }
 
-  toJson() => {
-        'rooms': rooms,
-        'suggests': suggests,
-      };
+  /// API 模式 ////////////////////////////////////////////////////////////////////
+  /// 查询用户所有的 API Keys
+  Future<List<UserAPIKey>> userAPIKeys() async {
+    return sendGetRequest('/v1/api-keys', (data) {
+      return ((data.data['data'] ?? []) as List<dynamic>).map((e) => UserAPIKey.fromJson(e)).toList();
+    });
+  }
 
-  static RoomsResponse fromJson(Map<String, dynamic> json) {
-    var rooms = <RoomInServer>[];
-    for (var item in json['data'] ?? []) {
-      rooms.add(RoomInServer.fromJson(item));
-    }
+  /// 查询指定 API Key
+  Future<UserAPIKey> userAPIKeyDetail({required int id}) async {
+    return sendGetRequest('/v1/api-keys/$id', (data) {
+      return UserAPIKey.fromJson(data.data['data']);
+    });
+  }
 
-    var suggests = <RoomGallery>[];
-    for (var item in json['suggests'] ?? []) {
-      suggests.add(RoomGallery.fromJson(item));
-    }
-
-    return RoomsResponse(
-      rooms: rooms,
-      suggests: suggests,
+  /// 创建 API Key
+  Future<String> createAPIKey({required String name}) async {
+    return sendPostRequest(
+      '/v1/api-keys',
+      (data) => data.data['key'],
+      formData: {'name': name},
     );
   }
-}
 
-class RoomInServer {
-  int id;
-  int userId;
-  int avatarId;
-  String? avatarUrl;
-  String name;
-  String? description;
-  int? priority;
-  String model;
-  String vendor;
-  String? systemPrompt;
-  String? initMessage;
-  int maxContext;
-  int? maxTokens;
-  DateTime? lastActiveTime;
-  DateTime? createdAt;
-  DateTime? updatedAt;
+  /// 删除 API Key
+  Future<void> deleteAPIKey({required int id}) async {
+    return sendDeleteRequest('/v1/api-keys/$id', (data) {});
+  }
 
-  RoomInServer({
-    required this.id,
-    required this.userId,
-    required this.avatarId,
-    required this.name,
-    required this.maxContext,
-    this.avatarUrl,
-    this.description,
-    this.priority,
-    required this.model,
-    required this.vendor,
-    this.systemPrompt,
-    this.initMessage,
-    this.lastActiveTime,
-    this.createdAt,
-    this.updatedAt,
-    this.maxTokens,
-  });
+  /// 消息通知 ////////////////////////////////////////////////////////////////////
+  /// 消息通知列表
+  Future<OffsetPageData<NotifyMessage>> notifications({
+    int startId = 0,
+    int? perPage = 20,
+    bool cache = true,
+  }) async {
+    return sendCachedGetRequest(
+      '/v1/notifications',
+      (resp) {
+        var res = <NotifyMessage>[];
+        for (var item in resp.data['data']) {
+          res.add(NotifyMessage.fromJson(item));
+        }
 
-  toJson() => {
-        'id': id,
+        return OffsetPageData(
+          data: res,
+          lastId: resp.data['last_id'],
+          startId: resp.data['start_id'],
+          perPage: resp.data['per_page'],
+        );
+      },
+      queryParameters: {
+        'start_id': startId,
+        'per_page': perPage,
+      },
+      forceRefresh: !cache,
+    );
+  }
+
+  /// 文章 ////////////////////////////////////////////////////////////////////
+  /// 文章详情
+  Future<Article> article({
+    required int id,
+    bool cache = true,
+  }) async {
+    return sendCachedGetRequest(
+      '/v1/articles/$id',
+      (resp) {
+        return Article.fromJson(resp.data['data']);
+      },
+      forceRefresh: !cache,
+    );
+  }
+
+  /// 发起 Stripe 支付
+  Future<StripePaymentCreatedResponse> createStripePaymentSheet({
+    required String productId,
+    String? source,
+  }) async {
+    return sendPostRequest(
+      '/v1/payment/stripe/payment-sheet',
+      (resp) {
+        return StripePaymentCreatedResponse.fromJson(resp.data);
+      },
+      formData: {
+        'product_id': productId,
+        'source': source,
+      },
+    );
+  }
+
+  /// 发起微信支付
+  Future<WechatPaymentCreatedResponse> createWechatPayment({
+    required String productId,
+    String? source,
+  }) async {
+    return sendPostRequest(
+      '/v1/payment/wechatpay/',
+      (resp) {
+        return WechatPaymentCreatedResponse.fromJson(resp.data);
+      },
+      formData: {
+        'product_id': productId,
+        'source': source,
+      },
+    );
+  }
+
+  /// 管理员接口：渠道类型
+  Future<List<AdminChannelType>> adminChannelTypes() async {
+    return sendCachedGetRequest('/v1/admin/channel-types', (resp) {
+      var res = <AdminChannelType>[];
+      for (var item in resp.data['data']) {
+        res.add(AdminChannelType.fromJson(item));
+      }
+
+      return res;
+    });
+  }
+
+  /// 管理员接口：返回聚合后的渠道列表
+  Future<List<AdminChannel>> adminChannelsAgg() async {
+    final channels = await sendGetRequest('/v1/admin/channels', (resp) {
+      var res = <AdminChannel>[];
+      for (var item in resp.data['data']) {
+        res.add(AdminChannel.fromJson(item));
+      }
+
+      return res;
+    });
+
+    final channelTypes = await adminChannelTypes();
+    channels.addAll(channelTypes.map((e) => AdminChannel(name: e.text, type: e.name)));
+
+    return channels;
+  }
+
+  /// 管理员接口：返回所有渠道
+  Future<List<AdminChannel>> adminChannels() async {
+    return sendGetRequest('/v1/admin/channels', (resp) {
+      var res = <AdminChannel>[];
+      for (var item in resp.data['data']) {
+        res.add(AdminChannel.fromJson(item));
+      }
+
+      return res;
+    });
+  }
+
+  /// 管理员接口：返回指定渠道
+  Future<AdminChannel> adminChannel({required int id}) async {
+    return sendGetRequest('/v1/admin/channels/$id', (resp) {
+      return AdminChannel.fromJson(resp.data['data']);
+    });
+  }
+
+  /// 管理员接口：创建渠道
+  Future<void> adminCreateChannel(AdminChannelAddReq req) async {
+    return sendPostJSONRequest(
+      '/v1/admin/channels',
+      (resp) {},
+      data: req.toJson(),
+    );
+  }
+
+  /// 管理员接口：更新渠道
+  Future<void> adminUpdateChannel({required int id, required AdminChannelUpdateReq req}) {
+    return sendPutJSONRequest(
+      '/v1/admin/channels/$id',
+      (resp) {},
+      data: req.toJson(),
+    );
+  }
+
+  /// 管理员接口：删除渠道
+  Future<void> adminDeleteChannel({required int id}) {
+    return sendDeleteRequest('/v1/admin/channels/$id', (resp) {});
+  }
+
+  /// 管理员接口：返回所有模型
+  Future<List<AdminModel>> adminModels() async {
+    return sendGetRequest(
+      '/v1/admin/models',
+      (resp) {
+        var res = <AdminModel>[];
+        for (var item in resp.data['data']) {
+          res.add(AdminModel.fromJson(item));
+        }
+
+        return res;
+      },
+      queryParameters: {
+        'sort': 'id:desc',
+      },
+    );
+  }
+
+  /// 管理员接口：返回指定模型
+  Future<AdminModel> adminModel({required String modelId}) async {
+    return sendGetRequest('/v1/admin/models/${Uri.encodeComponent(modelId)}', (resp) {
+      return AdminModel.fromJson(resp.data['data']);
+    });
+  }
+
+  /// 管理员接口：创建模型
+  Future<void> adminCreateModel(AdminModelAddReq req) async {
+    return sendPostJSONRequest(
+      '/v1/admin/models',
+      (resp) {},
+      data: req.toJson(),
+    );
+  }
+
+  /// 管理员接口：更新模型
+  Future<void> adminUpdateModel({required String modelId, required AdminModelUpdateReq req}) {
+    return sendPutJSONRequest(
+      '/v1/admin/models/${Uri.encodeComponent(modelId)}',
+      (resp) {},
+      data: req.toJson(),
+    );
+  }
+
+  /// 管理员接口：删除模型
+  Future<void> adminDeleteModel({required String modelId}) {
+    return sendDeleteRequest('/v1/admin/models/${Uri.encodeComponent(modelId)}', (resp) {});
+  }
+
+  /// 管理员接口：查询用户列表
+  Future<PagedData<AdminUser>> adminUsers({
+    int page = 1,
+    int perPage = 20,
+    String? keyword,
+  }) async {
+    return sendGetRequest(
+      '/v1/admin/users',
+      (resp) {
+        var res = <AdminUser>[];
+        for (var item in resp.data['data']) {
+          res.add(AdminUser.fromJson(item));
+        }
+
+        return PagedData(
+          data: res,
+          page: resp.data['page'] ?? 1,
+          perPage: resp.data['per_page'] ?? 20,
+          total: resp.data['total'],
+          lastPage: resp.data['last_page'],
+        );
+      },
+      queryParameters: {
+        'page': page,
+        'per_page': perPage,
+        'keyword': keyword,
+      },
+    );
+  }
+
+  /// 管理员接口：查询用户详情
+  Future<AdminUser> adminUser({required int id}) async {
+    return sendGetRequest('/v1/admin/users/$id', (resp) {
+      return AdminUser.fromJson(resp.data['data']);
+    });
+  }
+
+  /// 管理员接口：为用户分配智慧果
+  Future<void> adminUserQuotaAssign({
+    required int userId,
+    required int quota,
+    int? validPeriod,
+    String? note,
+  }) {
+    return sendPostJSONRequest(
+      '/v1/admin/quotas/assign',
+      (resp) {},
+      data: {
         'user_id': userId,
-        'avatar_id': avatarId,
-        'avatar_url': avatarUrl,
-        'name': name,
-        'description': description,
-        'priority': priority,
-        'model': model,
-        'vendor': vendor,
-        'init_message': initMessage,
-        'max_context': maxContext,
-        'max_tokens': maxTokens,
-        'system_prompt': systemPrompt,
-        'last_active_time': lastActiveTime?.toIso8601String(),
-        'created_at': createdAt?.toIso8601String(),
-        'updated_at': updatedAt?.toIso8601String(),
-      };
-
-  static RoomInServer fromJson(Map<String, dynamic> json) {
-    return RoomInServer(
-      id: json['id'],
-      userId: json['user_id'],
-      avatarId: json['avatar_id'] ?? 0,
-      avatarUrl: json['avatar_url'],
-      name: json['name'],
-      description: json['description'],
-      priority: json['priority'],
-      model: json['model'],
-      vendor: json['vendor'],
-      systemPrompt: json['system_prompt'],
-      initMessage: json['init_message'],
-      maxContext: json['max_context'] ?? 10,
-      maxTokens: json['max_tokens'],
-      lastActiveTime: json['last_active_time'] != null
-          ? DateTime.parse(json['last_active_time'])
-          : null,
-      createdAt:
-          json['CreatedAt'] != null ? DateTime.parse(json['CreatedAt']) : null,
-      updatedAt:
-          json['UpdatedAt'] != null ? DateTime.parse(json['UpdatedAt']) : null,
+        'quota': quota,
+        'valid_period': validPeriod,
+        'note': note,
+      },
     );
   }
-}
 
-class VersionCheckResp {
-  bool hasUpdate;
-  String serverVersion;
-  bool forceUpdate;
-  String url;
-  String message;
+  /// 管理员接口：查询用户当前额度
+  Future<QuotaResp> adminUserQuota({required int userId}) async {
+    return sendGetRequest('/v1/admin/quotas/users/$userId', (resp) {
+      return QuotaResp.fromJson(resp.data);
+    });
+  }
 
-  VersionCheckResp({
-    required this.hasUpdate,
-    required this.serverVersion,
-    required this.forceUpdate,
-    required this.url,
-    required this.message,
-  });
+  /// 管理员接口：重新加载配置缓存
+  Future<void> adminSettingsReload() async {
+    return sendPostRequest('/v1/admin/settings/reload', (resp) {});
+  }
 
-  toJson() => {
-        'has_update': hasUpdate,
-        'server_version': serverVersion,
-        'force_update': forceUpdate,
-        'url': url,
-        'message': message,
-      };
+  /// 管理员接口：重新加载配置缓存
+  Future<void> adminSettingReload(String key) async {
+    return sendPostRequest('/v1/admin/settings/key/$key/reload', (resp) {});
+  }
 
-  static VersionCheckResp fromJson(Map<String, dynamic> json) {
-    return VersionCheckResp(
-      hasUpdate: json['has_update'] ?? false,
-      serverVersion: json['server_version'],
-      forceUpdate: json['force_update'] ?? false,
-      url: json['url'],
-      message: json['message'],
+  /// 管理员接口：查询所有支付订单
+  Future<PagedData<AdminPaymentHistory>> adminPaymentHistories({
+    int page = 1,
+    int perPage = 20,
+    String? keyword,
+  }) async {
+    return sendGetRequest(
+      '/v1/admin/payments/histories',
+      (resp) {
+        var res = <AdminPaymentHistory>[];
+        for (var item in resp.data['data']) {
+          res.add(AdminPaymentHistory.fromJson(item));
+        }
+
+        return PagedData(
+          data: res,
+          page: resp.data['page'] ?? 1,
+          perPage: resp.data['per_page'] ?? 20,
+          total: resp.data['total'],
+          lastPage: resp.data['last_page'],
+        );
+      },
+      queryParameters: {
+        'page': page,
+        'per_page': perPage,
+        'keyword': keyword,
+      },
     );
   }
-}
 
-class SignInResp {
-  int id;
-  String name;
-  String? email;
-  String? phone;
-  String token;
-  bool isNewUser;
-  int reward;
+  /// 管理员接口：查询用户所有的数字人列表
+  Future<List<RoomInServer>> adminUserRooms({required int userId}) async {
+    return sendGetRequest('/v1/admin/messages/$userId/rooms', (resp) {
+      var res = <RoomInServer>[];
+      for (var item in resp.data['data']) {
+        res.add(RoomInServer.fromJson(item));
+      }
 
-  SignInResp({
-    required this.id,
-    required this.name,
-    this.email,
-    required this.token,
-    this.phone,
-    this.isNewUser = false,
-    this.reward = 0,
-  });
+      return res;
+    });
+  }
 
-  toJson() => {
-        'id': id,
-        'name': name,
-        'email': email,
-        'phone': phone,
-        'token': token,
-        'is_new_user': isNewUser,
-        'reward': reward,
-      };
+  /// 管理员接口：查询用户指定的数字人
+  Future<RoomInServer> adminUserRoom({required int userId, required int roomId}) async {
+    return sendGetRequest('/v1/admin/messages/$userId/rooms/$roomId', (resp) {
+      return RoomInServer.fromJson(resp.data['data']);
+    });
+  }
 
-  bool get needBindPhone => phone == null || phone!.isEmpty;
+  /// 管理员接口：查询用户指定数字人最近聊天历史记录
+  Future<List<MessageInServer>> adminUserRoomMessages({required int userId, required int roomId}) async {
+    return sendGetRequest('/v1/admin/messages/$userId/rooms/$roomId/messages', (resp) {
+      var res = <MessageInServer>[];
+      for (var item in resp.data['data']) {
+        res.add(MessageInServer.fromJson(item));
+      }
 
-  static SignInResp fromJson(Map<String, dynamic> json) {
-    return SignInResp(
-      id: json['id'],
-      name: json['name'],
-      email: json['email'],
-      phone: json['phone'],
-      token: json['token'],
-      isNewUser: json['is_new_user'] ?? false,
-      reward: json['reward'] ?? 0,
+      return res;
+    });
+  }
+
+  /// 管理员接口：查询用户指定群聊最近聊天历史记录
+  Future<List<GroupMessage>> adminUserRoomGroupMessages({
+    required int userId,
+    required int roomId,
+  }) async {
+    return sendGetRequest(
+      '/v1/admin/messages/$userId/rooms/$roomId/group-messages',
+      (resp) {
+        var res = <GroupMessage>[];
+        for (var item in resp.data['data']) {
+          res.add(GroupMessage.fromJson(item));
+        }
+
+        return res;
+      },
     );
   }
-}
 
-class AsyncTaskResp {
-  String status;
-  List<String>? errors;
-  List<String>? resources;
-  String? originImage;
+  /// 管理员接口：查询全局最近聊天历史记录
+  Future<PagedData<MessageInServer>> adminRecentlyMessages({
+    int page = 1,
+    int perPage = 20,
+    String? keyword,
+  }) async {
+    return sendGetRequest(
+      '/v1/admin/recent-messages',
+      (resp) {
+        var res = <MessageInServer>[];
+        for (var item in resp.data['data']) {
+          res.add(MessageInServer.fromJson(item));
+        }
 
-  AsyncTaskResp(this.status, {this.errors, this.resources, this.originImage});
-
-  toJson() => {
-        'status': status,
-        'errors': errors,
-        'resources': resources,
-        'origin_image': originImage,
-      };
-
-  static AsyncTaskResp fromJson(Map<String, dynamic> json) {
-    return AsyncTaskResp(
-      json['status'],
-      errors: json['errors'] != null
-          ? (json['errors'] as List<dynamic>).map((e) => e.toString()).toList()
-          : null,
-      resources: json['resources'] != null
-          ? (json['resources'] as List<dynamic>)
-              .map((e) => e.toString())
-              .toList()
-          : null,
-      originImage: json['origin_image'],
-    );
-  }
-}
-
-class Prompt {
-  String title;
-  String content;
-
-  Prompt(this.title, this.content);
-
-  toJson() {
-    return {
-      'title': title,
-      'content': content,
-    };
-  }
-
-  fromJson(Map<String, dynamic> json) {
-    title = json['title'];
-    content = json['content'];
-  }
-}
-
-class ChatExample {
-  String title;
-  String? content;
-  List<String> models;
-  List<String> tags;
-
-  ChatExample(
-    this.title, {
-    this.content,
-    this.models = const [],
-    this.tags = const [],
-  });
-
-  get text => content ?? title;
-
-  toJson() => {
-        'title': title,
-        'content': content,
-        'models': models,
-        'tags': tags,
-      };
-
-  fromJson(Map<String, dynamic> json) {
-    title = json['title'];
-    content = json['content'];
-    models = json['models'];
-    tags = json['tags'];
-  }
-}
-
-class TranslateText {
-  String? result;
-  String? speakUrl;
-
-  TranslateText(this.result, this.speakUrl);
-
-  toJson() => {
-        'result': result,
-        'speak_url': speakUrl,
-      };
-
-  static fromJson(Map<String, dynamic> json) {
-    return TranslateText(json['result'], json['speak_url']);
-  }
-}
-
-class UploadInitResponse {
-  String bucket;
-  String key;
-  String token;
-  String url;
-
-  UploadInitResponse(this.key, this.bucket, this.token, this.url);
-
-  toJson() => {
-        'bucket': bucket,
-        'key': key,
-        'token': token,
-        'url': url,
-      };
-
-  static fromJson(Map<String, dynamic> json) {
-    return UploadInitResponse(
-      json['key'],
-      json['bucket'],
-      json['token'],
-      json['url'],
-    );
-  }
-}
-
-class ModelStyle {
-  String id;
-  String name;
-  String? preview;
-
-  ModelStyle({required this.id, required this.name, this.preview});
-
-  toJson() => {
-        'id': id,
-        'name': name,
-        'preview': preview,
-      };
-
-  static ModelStyle fromJson(Map<String, dynamic> json) {
-    return ModelStyle(
-      id: json['id'],
-      name: json['name'],
-      preview: json['preview'],
-    );
-  }
-}
-
-class Model {
-  String id;
-  String name;
-  String? description;
-  String category;
-  bool isChat;
-  bool isImage;
-  bool disabled;
-  String? tag;
-
-  Model({
-    required this.id,
-    required this.name,
-    required this.category,
-    required this.isChat,
-    required this.isImage,
-    this.description,
-    this.disabled = false,
-    this.tag,
-  });
-
-  toJson() => {
-        'id': id,
-        'name': name,
-        'description': description,
-        'category': category,
-        'is_chat': isChat,
-        'is_image': isImage,
-        'disabled': disabled,
-        'tag': tag,
-      };
-
-  static Model fromJson(Map<String, dynamic> json) {
-    return Model(
-      id: json['id'],
-      name: json['name'],
-      description: json['description'],
-      category: json['category'],
-      isChat: json['is_chat'],
-      isImage: json['is_image'],
-      disabled: json['disabled'] ?? false,
-      tag: json['tag'],
-    );
-  }
-}
-
-class BackgroundImage {
-  String url;
-  String preview;
-
-  BackgroundImage(this.url, this.preview);
-
-  toJson() => {
-        'url': url,
-        'preview': preview,
-      };
-
-  static BackgroundImage fromJson(Map<String, dynamic> json) {
-    return BackgroundImage(
-      json['url'],
-      json['preview'],
-    );
-  }
-}
-
-class UserExistenceResp {
-  bool exist;
-  String signInMethod;
-
-  UserExistenceResp(this.exist, this.signInMethod);
-
-  toJson() => {
-        'exist': exist,
-        'sign_in_method': signInMethod,
-      };
-
-  static UserExistenceResp fromJson(Map<String, dynamic> json) {
-    return UserExistenceResp(
-      json['exist'],
-      json['sign_in_method'],
-    );
-  }
-}
-
-class PromptCategory {
-  String name;
-  List<PromptCategory> children;
-  List<PromptTag> tags;
-
-  PromptCategory(this.name, this.children, this.tags);
-
-  toJson() => {
-        'name': name,
-        'children': children,
-        'tags': tags,
-      };
-
-  static PromptCategory fromJson(Map<String, dynamic> json) {
-    var children = <PromptCategory>[];
-    for (var item in json['children'] ?? []) {
-      children.add(PromptCategory.fromJson(item));
-    }
-
-    var tags = <PromptTag>[];
-    for (var item in json['tags'] ?? []) {
-      tags.add(PromptTag.fromJson(item));
-    }
-
-    return PromptCategory(
-      json['name'],
-      children,
-      tags,
-    );
-  }
-}
-
-class PromptTag {
-  String name;
-  String value;
-
-  PromptTag(this.name, this.value);
-
-  toJson() => {
-        'name': name,
-        'value': value,
-      };
-
-  static PromptTag fromJson(Map<String, dynamic> json) {
-    return PromptTag(
-      json['name'],
-      json['value'],
+        return PagedData(
+          data: res,
+          page: resp.data['page'] ?? 1,
+          perPage: resp.data['per_page'] ?? 20,
+          total: resp.data['total'],
+          lastPage: resp.data['last_page'],
+        );
+      },
+      queryParameters: {
+        'page': page,
+        'per_page': perPage,
+        'keyword': keyword,
+      },
     );
   }
 }

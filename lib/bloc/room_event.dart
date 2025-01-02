@@ -29,6 +29,32 @@ class RoomCreateEvent extends RoomEvent {
   });
 }
 
+class GroupRoomCreateEvent extends RoomEvent {
+  final String name;
+  final String? avatarUrl;
+  final List<GroupMember>? members;
+
+  GroupRoomCreateEvent({
+    required this.name,
+    this.avatarUrl,
+    this.members,
+  });
+}
+
+class GroupRoomUpdateEvent extends RoomEvent {
+  final int groupId;
+  final String name;
+  final String? avatarUrl;
+  final List<GroupMember>? members;
+
+  GroupRoomUpdateEvent({
+    required this.groupId,
+    required this.name,
+    this.avatarUrl,
+    this.members,
+  });
+}
+
 class RoomDeleteEvent extends RoomEvent {
   final int roomId;
 
@@ -37,8 +63,9 @@ class RoomDeleteEvent extends RoomEvent {
 
 class RoomLoadEvent extends RoomEvent {
   final int roomId;
-
-  RoomLoadEvent(this.roomId);
+  final int? chatHistoryId;
+  final bool cascading;
+  RoomLoadEvent(this.roomId, {this.chatHistoryId, required this.cascading});
 }
 
 class RoomUpdateEvent extends RoomEvent {

@@ -4,8 +4,8 @@ import 'package:askaide/page/component/account_quota_card.dart';
 import 'package:askaide/page/component/background_container.dart';
 import 'package:askaide/page/component/image.dart';
 import 'package:askaide/page/component/invite_card.dart';
-import 'package:askaide/page/dialog.dart';
-import 'package:askaide/page/theme/custom_size.dart';
+import 'package:askaide/page/component/dialog.dart';
+import 'package:askaide/page/component/theme/custom_size.dart';
 import 'package:askaide/repo/settings_repo.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -23,9 +23,7 @@ class _UserCenterScreenState extends State<UserCenterScreen> {
   @override
   void initState() {
     context.read<AccountBloc>().add(AccountLoadEvent());
-    context
-        .read<CreativeIslandBloc>()
-        .add(CreativeIslandGalleryLoadEvent(mode: "default"));
+    context.read<CreativeIslandBloc>().add(CreativeIslandGalleryLoadEvent(mode: "default"));
 
     super.initState();
   }
@@ -51,10 +49,8 @@ class _UserCenterScreenState extends State<UserCenterScreen> {
             builder: (_, state) {
               if (state is AccountLoaded) {
                 return BlocConsumer<CreativeIslandBloc, CreativeIslandState>(
-                    listenWhen: (previous, current) =>
-                        current is CreativeIslandGalleryLoaded,
-                    buildWhen: (previous, current) =>
-                        current is CreativeIslandGalleryLoaded,
+                    listenWhen: (previous, current) => current is CreativeIslandGalleryLoaded,
+                    buildWhen: (previous, current) => current is CreativeIslandGalleryLoaded,
                     listener: (context, state) {
                       if (state is CreativeIslandHistoriesAllLoaded) {
                         if (state.error != null) {
@@ -71,9 +67,7 @@ class _UserCenterScreenState extends State<UserCenterScreen> {
                               AccountQuotaCard(
                                 userInfo: state.user!,
                                 onPaymentReturn: () {
-                                  context
-                                      .read<AccountBloc>()
-                                      .add(AccountLoadEvent(cache: false));
+                                  context.read<AccountBloc>().add(AccountLoadEvent(cache: false));
                                 },
                               ),
                               InviteCard(userInfo: state.user!),
@@ -85,17 +79,14 @@ class _UserCenterScreenState extends State<UserCenterScreen> {
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
                                 cacheExtent: 100,
-                                children: state2.items
-                                    .where((e) => e.images.isNotEmpty)
-                                    .map(
+                                children: state2.items.where((e) => e.images.isNotEmpty).map(
                                   (e) {
                                     return GestureDetector(
                                       onTap: () {
-                                        context.push(
-                                            '/creative-island/${e.islandId}/history/${e.id}');
+                                        context.push('/creative-island/${e.islandId}/history/${e.id}');
                                       },
                                       child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(10),
+                                        borderRadius: CustomSize.borderRadius,
                                         child: CachedNetworkImageEnhanced(
                                           imageUrl: e.firstImagePreview,
                                           fit: BoxFit.cover,

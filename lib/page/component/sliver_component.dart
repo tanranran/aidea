@@ -1,6 +1,6 @@
 import 'package:askaide/page/component/image.dart';
-import 'package:askaide/page/theme/custom_size.dart';
-import 'package:askaide/page/theme/custom_theme.dart';
+import 'package:askaide/page/component/theme/custom_size.dart';
+import 'package:askaide/page/component/theme/custom_theme.dart';
 import 'package:flutter/material.dart';
 
 class SliverSingleComponent extends StatelessWidget {
@@ -29,12 +29,13 @@ class SliverSingleComponent extends StatelessWidget {
     return CustomScrollView(
       slivers: [
         SliverAppBar(
+          automaticallyImplyLeading: false,
           expandedHeight: expendedHeight,
           floating: false,
           pinned: true,
           snap: false,
           primary: true,
-          actions: actions,
+          actions: (actions ?? []).isEmpty ? null : <Widget>[...actions!, const SizedBox(width: 8)],
           backgroundColor: customColors.backgroundContainerColor,
           flexibleSpace: FlexibleSpaceBar(
             title: title,
@@ -88,14 +89,15 @@ class SliverComponent extends StatelessWidget {
       headerSliverBuilder: (context, innerBoxIsScrolled) {
         return [
           SliverAppBar(
+            automaticallyImplyLeading: true,
             toolbarHeight: CustomSize.toolbarHeight,
             expandedHeight: expendedHeight,
             floating: false,
             pinned: true,
             snap: false,
             primary: true,
-            actions: actions,
-            backgroundColor: customColors.backgroundContainerColor,
+            actions: (actions ?? []).isEmpty ? null : <Widget>[...actions!, const SizedBox(width: 8)],
+            backgroundColor: backgroundImage != null ? Colors.transparent : customColors.backgroundColor,
             flexibleSpace: FlexibleSpaceBar(
               title: title,
               centerTitle: centerTitle,
@@ -114,8 +116,7 @@ class SliverComponent extends StatelessWidget {
               expandedTitleScale: 1.1,
             ),
           ),
-          if (appBarExtraWidgets != null)
-            ...appBarExtraWidgets!(innerBoxIsScrolled),
+          if (appBarExtraWidgets != null) ...appBarExtraWidgets!(innerBoxIsScrolled),
         ];
       },
       body: child,
@@ -132,8 +133,7 @@ class SliverTabComponent extends StatelessWidget {
   final double childAspectRatio;
   final double expendedHeight;
 
-  final List<Widget> Function(BuildContext context, String tabName)
-      itemsBuilder;
+  final List<Widget> Function(BuildContext context, String tabName) itemsBuilder;
 
   const SliverTabComponent({
     super.key,
@@ -157,17 +157,13 @@ class SliverTabComponent extends StatelessWidget {
           return [
             Theme(
               data: Theme.of(context).copyWith(
-                colorScheme: Theme.of(context)
-                    .colorScheme
-                    .copyWith(surfaceVariant: Colors.transparent),
+                colorScheme: Theme.of(context).colorScheme.copyWith(surfaceContainerHighest: Colors.transparent),
               ),
               child: SliverOverlapAbsorber(
-                handle:
-                    NestedScrollView.sliverOverlapAbsorberHandleFor(context),
+                handle: NestedScrollView.sliverOverlapAbsorberHandleFor(context),
                 sliver: SliverAppBar(
                   title: title,
-                  backgroundColor:
-                      innerBoxIsScrolled ? customColors.backgroundColor : null,
+                  backgroundColor: innerBoxIsScrolled ? customColors.backgroundColor : null,
                   centerTitle: true,
                   pinned: true,
                   floating: true,
@@ -183,12 +179,10 @@ class SliverTabComponent extends StatelessWidget {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [Colors.black, Colors.transparent],
-                        ).createShader(
-                            Rect.fromLTRB(0, 0, rect.width, rect.height));
+                        ).createShader(Rect.fromLTRB(0, 0, rect.width, rect.height));
                       },
                       blendMode: BlendMode.dstIn,
-                      child: backgroundImageUrl != null &&
-                              backgroundImageUrl!.isNotEmpty
+                      child: backgroundImageUrl != null && backgroundImageUrl!.isNotEmpty
                           ? CachedNetworkImageEnhanced(
                               imageUrl: backgroundImageUrl!,
                               fit: BoxFit.cover,
@@ -206,7 +200,7 @@ class SliverTabComponent extends StatelessWidget {
                     isScrollable: true,
                     labelColor: customColors.linkColor,
                     indicator: const BoxDecoration(),
-                    overlayColor: MaterialStateProperty.all(Colors.transparent),
+                    overlayColor: WidgetStateProperty.all(Colors.transparent),
                   ),
                 ),
               ),
@@ -236,8 +230,7 @@ class SliverTabComponent extends StatelessWidget {
                             },
                             childCount: items.length, //内部控件数量
                           ),
-                          gridDelegate:
-                              SliverGridDelegateWithFixedCrossAxisCount(
+                          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: crossAxisCount,
                             crossAxisSpacing: 5,
                             mainAxisSpacing: 10,

@@ -2,6 +2,25 @@ import 'dart:convert';
 
 import 'package:intl/intl.dart';
 
+class CreativeGalleryItemResponse {
+  CreativeGallery item;
+  bool isInternalUser;
+
+  CreativeGalleryItemResponse(this.item, this.isInternalUser);
+
+  toJson() => {
+        'data': item.toJson(),
+        'is_internal_user': isInternalUser,
+      };
+
+  static CreativeGalleryItemResponse fromJson(Map<String, dynamic> json) {
+    return CreativeGalleryItemResponse(
+      CreativeGallery.fromJson(json['data']),
+      json['is_internal_user'] ?? false,
+    );
+  }
+}
+
 class CreativeGallery {
   int id;
   int? userId;
@@ -16,8 +35,11 @@ class CreativeGallery {
   int refCount;
   int starLevel;
   int hotValue;
+  int status;
   DateTime? createdAt;
   DateTime? updatedAt;
+
+  String? previewImage;
 
   CreativeGallery({
     required this.id,
@@ -33,6 +55,8 @@ class CreativeGallery {
     this.refCount = 0,
     this.starLevel = 0,
     this.hotValue = 0,
+    this.status = 0,
+    this.previewImage,
     this.createdAt,
     this.updatedAt,
   });
@@ -58,6 +82,19 @@ class CreativeGallery {
     }
   }
 
+  /// 封面图
+  String get preview {
+    if (previewImage != null && previewImage != '') {
+      return previewImage!;
+    }
+
+    if (images.isNotEmpty) {
+      return images.first;
+    }
+
+    return '';
+  }
+
   toJson() => {
         'id': id,
         'user_id': userId,
@@ -72,6 +109,8 @@ class CreativeGallery {
         'ref_count': refCount,
         'star_level': starLevel,
         'hot_value': hotValue,
+        'status': status,
+        'preview_image': previewImage,
         'created_at': createdAt?.toIso8601String(),
         'updated_at': updatedAt?.toIso8601String(),
       };
@@ -91,6 +130,8 @@ class CreativeGallery {
       refCount: json['ref_count'] ?? 0,
       starLevel: json['star_level'] ?? 0,
       hotValue: json['hot_value'] ?? 0,
+      status: json['status'] ?? 0,
+      previewImage: json['preview_image'],
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'])
           : null,
@@ -114,6 +155,9 @@ class CreativeIslandCapacity {
   List<String> allowUpscaleBy;
   bool showImageStrength;
   List<CreativeIslandImageFilter> filters;
+  List<CreativeIslandArtisticStyle> artisticStyles;
+  List<CreativeIslandArtisticStyle> artisticTextStyles;
+  List<CreativeIslandArtisticStyle> artisticTextFonts;
 
   CreativeIslandCapacity({
     required this.showAIRewrite,
@@ -128,6 +172,9 @@ class CreativeIslandCapacity {
     this.allowUpscaleBy = const [],
     this.showImageStrength = false,
     this.filters = const [],
+    this.artisticStyles = const [],
+    this.artisticTextStyles = const [],
+    this.artisticTextFonts = const [],
   });
 
   toJson() => {
@@ -143,6 +190,11 @@ class CreativeIslandCapacity {
         'allow_upscale_by': allowUpscaleBy,
         'show_image_strength': showImageStrength,
         'filters': filters.map((e) => e.toJson()).toList(),
+        'artistic_styles': artisticStyles.map((e) => e.toJson()).toList(),
+        'artistic_text_styles':
+            artisticTextStyles.map((e) => e.toJson()).toList(),
+        'artistic_text_fonts':
+            artisticTextFonts.map((e) => e.toJson()).toList(),
       };
 
   static CreativeIslandCapacity fromJson(Map<String, dynamic> json) {
@@ -167,6 +219,42 @@ class CreativeIslandCapacity {
       filters: ((json['filters'] ?? []) as List<dynamic>)
           .map((e) => CreativeIslandImageFilter.fromJson(e))
           .toList(),
+      artisticStyles: ((json['artistic_styles'] ?? []) as List<dynamic>)
+          .map((e) => CreativeIslandArtisticStyle.fromJson(e))
+          .toList(),
+      artisticTextStyles:
+          ((json['artistic_text_styles'] ?? []) as List<dynamic>)
+              .map((e) => CreativeIslandArtisticStyle.fromJson(e))
+              .toList(),
+      artisticTextFonts: ((json['artistic_text_fonts'] ?? []) as List<dynamic>)
+          .map((e) => CreativeIslandArtisticStyle.fromJson(e))
+          .toList(),
+    );
+  }
+}
+
+class CreativeIslandArtisticStyle {
+  String id;
+  String name;
+  String? previewImage;
+
+  CreativeIslandArtisticStyle({
+    required this.id,
+    required this.name,
+    this.previewImage,
+  });
+
+  toJson() => {
+        'id': id,
+        'name': name,
+        'preview_image': previewImage,
+      };
+
+  static CreativeIslandArtisticStyle fromJson(Map<String, dynamic> json) {
+    return CreativeIslandArtisticStyle(
+      id: json['id'],
+      name: json['name'],
+      previewImage: json['preview_image'],
     );
   }
 }
@@ -610,9 +698,14 @@ class CreativeItemInServer {
   bool get isImageType =>
       islandType != null && (islandType == 2 || islandType! >= 5);
 
+  bool get isVideoType => islandType != null && islandType == 3;
+
   List<String> get images {
     try {
-      if (isImageType && answer != null && answer != '' && isSuccessful) {
+      if ((isImageType || isVideoType) &&
+          answer != null &&
+          answer != '' &&
+          isSuccessful) {
         return (jsonDecode(answer!) as List<dynamic>).cast<String>();
       }
       return [];
@@ -649,6 +742,11 @@ class CreativeItemInServer {
     }
 
     return {};
+  }
+
+  /// 上传的原图
+  String? get originalImage {
+    return params['image'];
   }
 
   String get markdownAnswer {
@@ -736,6 +834,9 @@ class CreativeIslandItemV2 {
   String titleColor;
   String previewImage;
   String routeUri;
+  String tag;
+  String? note;
+  String size;
 
   CreativeIslandItemV2({
     required this.id,
@@ -743,6 +844,9 @@ class CreativeIslandItemV2 {
     required this.titleColor,
     required this.previewImage,
     required this.routeUri,
+    this.tag = '',
+    this.note,
+    this.size = 'large',
   });
 
   toJson() => {
@@ -751,6 +855,9 @@ class CreativeIslandItemV2 {
         'title_color': titleColor,
         'preview_image': previewImage,
         'route_uri': routeUri,
+        'tag': tag,
+        'note': note,
+        'size': size,
       };
 
   static CreativeIslandItemV2 fromJson(Map<String, dynamic> json) {
@@ -760,6 +867,9 @@ class CreativeIslandItemV2 {
       titleColor: json['title_color'],
       previewImage: json['preview_image'],
       routeUri: json['route_uri'],
+      tag: json['tag'] ?? '',
+      note: json['note'],
+      size: json['size'] ?? 'large',
     );
   }
 }

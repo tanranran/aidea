@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-const VERSION = '1.0.3';
-const DB_VERSION = 23;
+// 客户端应用版本号
+const clientVersion = '2.0.0';
+// 本地数据库版本号
+const databaseVersion = 27;
 
-const maxRoomNumForNonVIP = 50;
-const coinSign = '个';
-
-const apiServerURL = 'https://ai-api.aicode.cc';
 const settingAPIServerToken = 'api-token';
 const settingUserInfo = 'user-info';
 const settingUsingGuestMode = 'using-guest-mode';
+
+const settingForceShowLab = 'force-show-lab';
 
 const chatAnywhereModel = 'openai:gpt-3.5-turbo';
 const chatAnywhereRoomId = 1;
@@ -26,6 +26,7 @@ const creativeIslandCompletionTypeURLImage = 'url-images';
 // 只有在第一次安装的时候才会加载引导页
 const settingOnBoardingLoaded = 'on-boarding-loaded';
 const settingLanguage = 'language';
+const settingServerURL = 'server-url';
 // 背景图片
 const settingBackgroundImage = 'background-image';
 const settingBackgroundImageBlur = 'background-image-blur';
@@ -88,3 +89,7 @@ const universalLink = 'https://ai.aicode.cc/wechat-login/';
 const qiniuImageTypeAvatar = 'avatar';
 const qiniuImageTypeThumb = 'thumb';
 const qiniuImageTypeThumbMedium = 'thumb_500';
+
+// 缓存相关的 Keys
+// 最后一次使用的模型
+const cacheKeyLastModel = 'last-model';
